@@ -1,0 +1,451 @@
+
+        :root {
+            /* Цветовая палитра */
+            --color-primary: #4CAF50;
+            --color-primary-dark: #45a049;
+            --color-primary-light: rgba(76, 175, 80, 0.1);
+            --color-secondary: #2d3436;
+            --color-black: #000000;
+            --color-white: #ffffff;
+            --color-gray-light: #f5f5f5;
+            --color-gray: #666;
+            --color-gray-lighter: #f8f9fa;
+            --color-border: #e9ecef;
+            --color-accent: #00a8ff;
+            --color-text: #333;
+            --color-text-light: #888;
+            
+            /* Размеры и отступы */
+            --border-radius: 20px;
+            --border-radius-sm: 12px;
+            --spacing: 20px;
+            --spacing-lg: 40px;
+            
+            /* Тени */
+            --shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            --shadow-btn: 0 10px 25px rgba(76, 175, 80, 0.4);
+            --shadow-switch: 0 4px 15px rgba(0, 0, 0, 0.2);
+            
+            /* Анимации */
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: var(--color-gray-light);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow-x: hidden;
+            color: var(--color-text);
+            line-height: 1.6;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            padding: var(--spacing);
+        }
+
+        .form-container {
+            display: flex;
+            background: var(--color-white);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            min-height: 550px;
+            position: relative;
+        }
+
+        /* Левая часть с изображением */
+        .form-image {
+            flex: 1;
+            background: linear-gradient(135deg, var(--color-secondary), var(--color-black));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-lg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .form-image::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="graph" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M0,0 L20,0 L20,20 L0,20 Z" fill="none" stroke="rgba(0,168,255,0.1)" stroke-width="0.5"/></pattern></defs><rect x="0" y="0" width="100" height="100" fill="url(%23graph)"/></svg>');
+            opacity: 0.3;
+        }
+
+        .image-content {
+            text-align: center;
+            color: var(--color-white);
+            z-index: 2;
+            position: relative;
+        }
+
+        .image-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: var(--color-primary);
+            background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .image-content h3 {
+            font-size: 1.8rem;
+            margin-bottom: 15px;
+            font-weight: 700;
+            background: linear-gradient(to right, var(--color-white), var(--color-primary-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .image-content p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            line-height: 1.6;
+            font-weight: 300;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+
+        /* Правая часть с формами */
+        .form-content {
+            flex: 1;
+            padding: var(--spacing-lg);
+            background: var(--color-white);
+            position: relative;
+        }
+
+        .form-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .logo {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, var(--color-primary), var(--color-accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: inline-block;
+        }
+
+        .form-switcher {
+            display: flex;
+            margin-bottom: 35px;
+            background: var(--color-gray-lighter);
+            border-radius: 15px;
+            padding: 6px;
+            gap: 5px;
+        }
+
+        .switch-btn {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            background: transparent;
+            color: var(--color-gray);
+            cursor: pointer;
+            border-radius: 12px;
+            transition: var(--transition);
+            font-weight: 500;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .switch-btn i {
+            font-size: 18px;
+        }
+
+        .switch-btn.active {
+            background: var(--color-black);
+            color: var(--color-white);
+            box-shadow: var(--shadow-switch);
+        }
+
+        .switch-btn:hover:not(.active) {
+            background: var(--color-border);
+        }
+
+        .form {
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: var(--transition);
+        }
+
+        .form.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        h2 {
+            color: var(--color-text);
+            text-align: center;
+            margin-bottom: 35px;
+            font-weight: 600;
+            font-size: 26px;
+            position: relative;
+            padding-bottom: 15px;
+        }
+
+        h2::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50px;
+            height: 3px;
+            background: linear-gradient(to right, var(--color-primary), var(--color-accent));
+            border-radius: 3px;
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 28px;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 16px 20px 16px 50px;
+            background: var(--color-gray-lighter);
+            border: 2px solid var(--color-border);
+            border-radius: var(--border-radius-sm);
+            color: var(--color-text);
+            font-size: 16px;
+            transition: var(--transition);
+            outline: none;
+            font-family: 'Roboto', sans-serif;
+        }
+
+        .input-group input:focus {
+            border-color: var(--color-primary);
+            background: var(--color-white);
+            box-shadow: 0 0 0 3px var(--color-primary-light);
+        }
+
+        .input-group i.input-icon {
+            position: absolute;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--color-gray);
+            font-size: 18px;
+            transition: var(--transition);
+        }
+
+        .input-group input:focus + i.input-icon {
+            color: var(--color-primary);
+        }
+
+        .input-group label {
+            position: absolute;
+            top: 16px;
+            left: 50px;
+            color: var(--color-gray);
+            pointer-events: none;
+            transition: var(--transition);
+            font-size: 15px;
+        }
+
+        .input-group input:focus + i.input-icon + label,
+        .input-group input:valid + i.input-icon + label {
+            top: -12px;
+            left: 40px;
+            font-size: 12px;
+            color: var(--color-primary);
+            background: var(--color-white);
+            padding: 0 8px;
+            font-weight: 500;
+        }
+
+        .password-toggle {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--color-gray);
+            cursor: pointer;
+            font-size: 18px;
+            transition: var(--transition);
+        }
+
+        .password-toggle:hover {
+            color: var(--color-primary);
+        }
+
+        .ps5-btn {
+            width: 100%;
+            padding: 17px;
+            background: var(--color-primary);
+            border: none;
+            border-radius: var(--border-radius-sm);
+            color: var(--color-white);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .ps5-btn i {
+            font-size: 20px;
+        }
+
+        .ps5-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-btn);
+            background: var(--color-primary-dark);
+        }
+
+        .ps5-btn:active {
+            transform: translateY(0);
+        }
+
+        .form-footer {
+            text-align: center;
+            margin-top: 25px;
+            color: var(--color-text-light);
+            font-size: 14px;
+        }
+
+        .form-footer a {
+            color: var(--color-primary);
+            text-decoration: none;
+            transition: var(--transition);
+            font-weight: 500;
+        }
+
+        .form-footer a:hover {
+            text-decoration: underline;
+        }
+
+        /* Дополнительные элементы дизайна */
+        .decoration {
+            position: absolute;
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--color-primary-light), transparent);
+            filter: blur(60px);
+            z-index: -1;
+        }
+
+        .decoration-1 {
+            top: -50px;
+            right: -50px;
+        }
+
+        .decoration-2 {
+            bottom: -50px;
+            left: -50px;
+            background: linear-gradient(135deg, transparent, var(--color-primary-light));
+        }
+
+        /* Адаптивность */
+        @media (max-width: 900px) {
+            .form-container {
+                flex-direction: column;
+                max-width: 500px;
+                margin: 0 auto;
+            }
+            
+            .form-image {
+                display: none;
+            }
+            
+            .form-content {
+                padding: 30px;
+            }
+        }
+
+        @media (max-width: 500px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .form-content {
+                padding: 25px 20px;
+            }
+            
+            .form-switcher {
+                margin-bottom: 25px;
+            }
+            
+            .switch-btn {
+                padding: 12px;
+                font-size: 14px;
+            }
+            
+            h2 {
+                font-size: 22px;
+                margin-bottom: 25px;
+            }
+            
+            .input-group {
+                margin-bottom: 22px;
+            }
+            
+            .input-group input {
+                padding: 14px 18px 14px 45px;
+            }
+            
+            .input-group i.input-icon {
+                left: 15px;
+                font-size: 16px;
+            }
+            
+            .input-group label {
+                left: 45px;
+            }
+            
+            .ps5-btn {
+                padding: 15px;
+                font-size: 15px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .switch-btn {
+                flex-direction: column;
+                gap: 4px;
+                padding: 10px;
+            }
+            
+            .switch-btn i {
+                font-size: 16px;
+            }
+            
+            h2 {
+                font-size: 20px;
+            }
+        }
+    

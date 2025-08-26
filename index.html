@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход в систему обучения</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="form-container">
+            <!-- Левая часть с изображением -->
+            <div class="form-image">
+                <div class="image-content">
+                    <i class="fas fa-graduation-cap image-icon"></i>
+                    <h3>Система обучения персонала</h3>
+                    <p>Профессиональное развитие вашей команды</p>
+                </div>
+            </div>
+
+            <!-- Правая часть с формами -->
+            <div class="form-content">
+                <div class="form-switcher">
+                    <button class="switch-btn active" data-form="login">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Вход
+                    </button>
+                    <button class="switch-btn" data-form="register">
+                        <i class="fas fa-user-plus"></i>
+                        Регистрация
+                    </button>
+                </div>
+
+                <form id="loginForm" class="form active" action="login.php" method="POST">
+                    <h2>Добро пожаловать</h2>
+                    <div class="input-group">
+                        <input type="email" name="email" required>
+                        <i class="fas fa-envelope input-icon"></i>
+                        <label>Email</label>
+                        <span class="focus-border"></span>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" name="password" required>
+                        <i class="fas fa-lock input-icon"></i>
+                        <label>Пароль</label>
+                        <span class="focus-border"></span>
+                    </div>
+                    <button type="submit" class="ps5-btn">
+                        <i class="fas fa-sign-in-alt"></i>
+                        Войти
+                    </button>
+                </form>
+
+                <form id="registerForm" class="form" action="register.php" method="POST">
+                    <h2>Создать аккаунт</h2>
+                    <div class="input-group">
+                        <input type="text" name="full_name" required>
+                        <i class="fas fa-user input-icon"></i>
+                        <label>ФИО</label>
+                        <span class="focus-border"></span>
+                    </div>
+                    <div class="input-group">
+                        <input type="email" name="email" required>
+                        <i class="fas fa-envelope input-icon"></i>
+                        <label>Email</label>
+                        <span class="focus-border"></span>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" name="password" required>
+                        <i class="fas fa-lock input-icon"></i>
+                        <label>Пароль</label>
+                        <span class="focus-border"></span>
+                    </div>
+                    <div class="input-group">
+                        <input type="password" name="confirm_password" required>
+                        <i class="fas fa-lock input-icon"></i>
+                        <label>Подтвердите пароль</label>
+                        <span class="focus-border"></span>
+                    </div>
+                    <button type="submit" class="ps5-btn">
+                        <i class="fas fa-user-plus"></i>
+                        Зарегистрироваться
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
