@@ -1,33 +1,32 @@
-
         :root {
-            /* Цветовая палитра */
-            --color-primary: #4CAF50;
-            --color-primary-dark: #45a049;
-            --color-primary-light: rgba(76, 175, 80, 0.1);
+            /* Цветовая палитра МегаФон */
+            --color-megafon: #00a8e0;
+            --color-megafon-dark: #0088c0;
+            --color-megafon-light: rgba(0, 168, 224, 0.1);
             --color-secondary: #2d3436;
             --color-black: #000000;
             --color-white: #ffffff;
-            --color-gray-light: #f5f5f5;
-            --color-gray: #666;
-            --color-gray-lighter: #f8f9fa;
-            --color-border: #e9ecef;
-            --color-accent: #00a8ff;
-            --color-text: #333;
-            --color-text-light: #888;
+            --color-gray-light: #f8fafc;
+            --color-gray: #64748b;
+            --color-gray-lighter: #f1f5f9;
+            --color-border: #e2e8f0;
+            --color-accent: #ff6b35;
+            --color-text: #1e293b;
+            --color-text-light: #94a3b8;
             
             /* Размеры и отступы */
-            --border-radius: 20px;
-            --border-radius-sm: 12px;
-            --spacing: 20px;
-            --spacing-lg: 40px;
+            --border-radius: 24px;
+            --border-radius-sm: 16px;
+            --spacing: 24px;
+            --spacing-lg: 48px;
             
             /* Тени */
-            --shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
-            --shadow-btn: 0 10px 25px rgba(76, 175, 80, 0.4);
-            --shadow-switch: 0 4px 15px rgba(0, 0, 0, 0.2);
+            --shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
+            --shadow-btn: 0 15px 35px rgba(0, 168, 224, 0.3);
+            --shadow-switch: 0 8px 25px rgba(0, 0, 0, 0.1);
             
             /* Анимации */
-            --transition: all 0.3s ease;
+            --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         * {
@@ -38,7 +37,6 @@
 
         body {
             font-family: 'Roboto', sans-serif;
-            background: var(--color-gray-light);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -46,28 +44,93 @@
             overflow-x: hidden;
             color: var(--color-text);
             line-height: 1.6;
+            position: relative;
+        }
+
+        /* Анимированный фон */
+        .background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .particles {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .particle {
+            position: absolute;
+            background: linear-gradient(135deg, var(--color-megafon), var(--color-accent));
+            border-radius: 50%;
+            opacity: 0.3;
+            animation: float 20s infinite ease-in-out;
+        }
+
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+            }
+            25% {
+                transform: translateY(-20px) rotate(5deg);
+            }
+            50% {
+                transform: translateY(0) rotate(10deg);
+            }
+            75% {
+                transform: translateY(20px) rotate(5deg);
+            }
+        }
+
+        .gradient-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                rgba(0, 168, 224, 0.05) 0%,
+                rgba(255, 107, 53, 0.05) 50%,
+                rgba(0, 168, 224, 0.05) 100%);
+            animation: gradientShift 15s ease infinite;
+        }
+
+        @keyframes gradientShift {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
         }
 
         .container {
             width: 100%;
-            max-width: 1000px;
+            max-width: 1200px;
             padding: var(--spacing);
         }
 
         .form-container {
             display: flex;
-            background: var(--color-white);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
             border-radius: var(--border-radius);
             overflow: hidden;
             box-shadow: var(--shadow);
-            min-height: 550px;
+            min-height: 650px;
             position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
 
-        /* Левая часть с изображением */
+        /* Левая часть с анимированным дизайном */
         .form-image {
             flex: 1;
-            background: linear-gradient(135deg, var(--color-secondary), var(--color-black));
+            background: linear-gradient(135deg, var(--color-megafon), var(--color-secondary));
             display: flex;
             align-items: center;
             justify-content: center;
@@ -76,15 +139,64 @@
             overflow: hidden;
         }
 
-        .form-image::before {
-            content: '';
+        .animated-shapes {
             position: absolute;
+            width: 100%;
+            height: 100%;
             top: 0;
             left: 0;
-            right: 0;
-            bottom: 0;
-            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="graph" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M0,0 L20,0 L20,20 L0,20 Z" fill="none" stroke="rgba(0,168,255,0.1)" stroke-width="0.5"/></pattern></defs><rect x="0" y="0" width="100" height="100" fill="url(%23graph)"/></svg>');
-            opacity: 0.3;
+        }
+
+        .shape {
+            position: absolute;
+            border-radius: 50%;
+            opacity: 0.1;
+            animation: shapeMove 25s infinite linear;
+        }
+
+        .shape-1 {
+            width: 300px;
+            height: 300px;
+            background: var(--color-white);
+            top: -100px;
+            left: -100px;
+            animation-delay: 0s;
+        }
+
+        .shape-2 {
+            width: 200px;
+            height: 200px;
+            background: var(--color-accent);
+            bottom: -50px;
+            right: -50px;
+            animation-delay: -5s;
+        }
+
+        .shape-3 {
+            width: 150px;
+            height: 150px;
+            background: var(--color-megafon);
+            top: 50%;
+            left: 70%;
+            animation-delay: -10s;
+        }
+
+        @keyframes shapeMove {
+            0% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+            25% {
+                transform: translate(20px, 20px) rotate(90deg);
+            }
+            50% {
+                transform: translate(0, 40px) rotate(180deg);
+            }
+            75% {
+                transform: translate(-20px, 20px) rotate(270deg);
+            }
+            100% {
+                transform: translate(0, 0) rotate(360deg);
+            }
         }
 
         .image-content {
@@ -94,33 +206,51 @@
             position: relative;
         }
 
-        .image-icon {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            color: var(--color-primary);
-            background: linear-gradient(135deg, var(--color-primary), var(--color-accent));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .megafon-logo {
+            width: 120px;
+            height: 120px;
+            margin: 0 auto 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            animation: pulse 3s infinite ease-in-out;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 rgba(255, 255, 255, 0.2);
+            }
+            50% {
+                transform: scale(1.05);
+                box-shadow: 0 0 30px rgba(255, 255, 255, 0.4);
+            }
+        }
+
+        .megafon-logo i {
+            font-size: 3.5rem;
+            color: var(--color-white);
         }
 
         .image-content h3 {
-            font-size: 1.8rem;
-            margin-bottom: 15px;
+            font-size: 2.2rem;
+            margin-bottom: 20px;
             font-weight: 700;
-            background: linear-gradient(to right, var(--color-white), var(--color-primary-light));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         .image-content p {
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             opacity: 0.9;
             line-height: 1.6;
             font-weight: 300;
-            max-width: 300px;
+            max-width: 350px;
             margin: 0 auto;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
         }
 
         /* Правая часть с формами */
@@ -133,14 +263,14 @@
 
         .form-header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 40px;
         }
 
         .logo {
-            font-size: 2rem;
+            font-size: 2.5rem;
             font-weight: 700;
-            margin-bottom: 10px;
-            background: linear-gradient(to right, var(--color-primary), var(--color-accent));
+            margin-bottom: 15px;
+            background: linear-gradient(to right, var(--color-megafon), var(--color-accent));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
@@ -149,48 +279,64 @@
 
         .form-switcher {
             display: flex;
-            margin-bottom: 35px;
+            margin-bottom: 40px;
             background: var(--color-gray-lighter);
-            border-radius: 15px;
-            padding: 6px;
-            gap: 5px;
+            border-radius: 20px;
+            padding: 8px;
+            gap: 8px;
+            position: relative;
+            overflow: hidden;
         }
 
         .switch-btn {
             flex: 1;
-            padding: 14px;
+            padding: 16px;
             border: none;
             background: transparent;
             color: var(--color-gray);
             cursor: pointer;
-            border-radius: 12px;
+            border-radius: 16px;
             transition: var(--transition);
             font-weight: 500;
-            font-size: 15px;
+            font-size: 16px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
+            position: relative;
+            z-index: 2;
         }
 
         .switch-btn i {
-            font-size: 18px;
+            font-size: 20px;
+            transition: var(--transition);
+        }
+
+        .switch-slider {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            width: calc(50% - 8px);
+            height: calc(100% - 16px);
+            background: var(--color-megafon);
+            border-radius: 16px;
+            transition: var(--transition);
+            z-index: 1;
         }
 
         .switch-btn.active {
-            background: var(--color-black);
             color: var(--color-white);
-            box-shadow: var(--shadow-switch);
         }
 
         .switch-btn:hover:not(.active) {
-            background: var(--color-border);
+            background: rgba(0, 168, 224, 0.1);
+            color: var(--color-megafon);
         }
 
         .form {
             display: none;
             opacity: 0;
-            transform: translateY(10px);
+            transform: translateY(20px);
             transition: var(--transition);
         }
 
@@ -198,16 +344,28 @@
             display: block;
             opacity: 1;
             transform: translateY(0);
+            animation: formAppear 0.6s ease-out;
+        }
+
+        @keyframes formAppear {
+            0% {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         h2 {
             color: var(--color-text);
             text-align: center;
-            margin-bottom: 35px;
+            margin-bottom: 40px;
             font-weight: 600;
-            font-size: 26px;
+            font-size: 28px;
             position: relative;
-            padding-bottom: 15px;
+            padding-bottom: 20px;
         }
 
         h2::after {
@@ -216,34 +374,36 @@
             bottom: 0;
             left: 50%;
             transform: translateX(-50%);
-            width: 50px;
-            height: 3px;
-            background: linear-gradient(to right, var(--color-primary), var(--color-accent));
-            border-radius: 3px;
+            width: 60px;
+            height: 4px;
+            background: linear-gradient(to right, var(--color-megafon), var(--color-accent));
+            border-radius: 4px;
         }
 
         .input-group {
             position: relative;
-            margin-bottom: 28px;
+            margin-bottom: 32px;
         }
 
         .input-group input {
             width: 100%;
-            padding: 16px 20px 16px 50px;
+            padding: 18px 24px 18px 55px;
             background: var(--color-gray-lighter);
-            border: 2px solid var(--color-border);
+            border: 2px solid transparent;
             border-radius: var(--border-radius-sm);
             color: var(--color-text);
             font-size: 16px;
             transition: var(--transition);
             outline: none;
             font-family: 'Roboto', sans-serif;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
         }
 
         .input-group input:focus {
-            border-color: var(--color-primary);
+            border-color: var(--color-megafon);
             background: var(--color-white);
-            box-shadow: 0 0 0 3px var(--color-primary-light);
+            box-shadow: 0 0 0 4px var(--color-megafon-light);
+            transform: translateY(-2px);
         }
 
         .input-group i.input-icon {
@@ -252,58 +412,65 @@
             top: 50%;
             transform: translateY(-50%);
             color: var(--color-gray);
-            font-size: 18px;
+            font-size: 20px;
             transition: var(--transition);
         }
 
         .input-group input:focus + i.input-icon {
-            color: var(--color-primary);
+            color: var(--color-megafon);
+            transform: translateY(-50%) scale(1.1);
         }
 
         .input-group label {
             position: absolute;
-            top: 16px;
-            left: 50px;
+            top: 18px;
+            left: 55px;
             color: var(--color-gray);
             pointer-events: none;
             transition: var(--transition);
-            font-size: 15px;
+            font-size: 16px;
+            background: transparent;
         }
 
         .input-group input:focus + i.input-icon + label,
         .input-group input:valid + i.input-icon + label {
             top: -12px;
-            left: 40px;
-            font-size: 12px;
-            color: var(--color-primary);
+            left: 45px;
+            font-size: 13px;
+            color: var(--color-megafon);
             background: var(--color-white);
-            padding: 0 8px;
-            font-weight: 500;
+            padding: 0 12px;
+            font-weight: 600;
+            border-radius: 10px;
         }
 
         .password-toggle {
             position: absolute;
-            right: 15px;
+            right: 20px;
             top: 50%;
             transform: translateY(-50%);
             color: var(--color-gray);
             cursor: pointer;
-            font-size: 18px;
+            font-size: 20px;
             transition: var(--transition);
+            background: transparent;
+            border: none;
+            outline: none;
         }
 
         .password-toggle:hover {
-            color: var(--color-primary);
+            color: var(--color-megafon);
+            transform: translateY(-50%) scale(1.1);
         }
 
         .ps5-btn {
             width: 100%;
-            padding: 17px;
-            background: var(--color-primary);
+            padding: 20px;
+            background: linear-gradient(135deg, var(--color-megafon), var(--color-megafon-dark));
             border: none;
             border-radius: var(--border-radius-sm);
             color: var(--color-white);
-            font-size: 16px;
+            font-size: 17px;
             font-weight: 600;
             cursor: pointer;
             transition: var(--transition);
@@ -312,66 +479,103 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
             letter-spacing: 0.5px;
+            box-shadow: var(--shadow-btn);
         }
 
-        .ps5-btn i {
-            font-size: 20px;
+        .ps5-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: var(--transition);
         }
 
         .ps5-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-btn);
-            background: var(--color-primary-dark);
+            transform: translateY(-3px);
+            box-shadow: 0 20px 40px rgba(0, 168, 224, 0.4);
+        }
+
+        .ps5-btn:hover::before {
+            left: 100%;
         }
 
         .ps5-btn:active {
-            transform: translateY(0);
+            transform: translateY(-1px);
+        }
+
+        .ps5-btn i {
+            font-size: 22px;
+            transition: var(--transition);
+        }
+
+        .ps5-btn:hover i {
+            transform: translateX(5px);
         }
 
         .form-footer {
             text-align: center;
-            margin-top: 25px;
+            margin-top: 30px;
             color: var(--color-text-light);
-            font-size: 14px;
+            font-size: 15px;
         }
 
         .form-footer a {
-            color: var(--color-primary);
+            color: var(--color-megafon);
             text-decoration: none;
             transition: var(--transition);
-            font-weight: 500;
+            font-weight: 600;
+            position: relative;
         }
 
-        .form-footer a:hover {
-            text-decoration: underline;
-        }
-
-        /* Дополнительные элементы дизайна */
-        .decoration {
+        .form-footer a::after {
+            content: '';
             position: absolute;
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, var(--color-primary-light), transparent);
-            filter: blur(60px);
-            z-index: -1;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--color-megafon);
+            transition: var(--transition);
         }
 
-        .decoration-1 {
-            top: -50px;
-            right: -50px;
+        .form-footer a:hover::after {
+            width: 100%;
         }
 
-        .decoration-2 {
-            bottom: -50px;
-            left: -50px;
-            background: linear-gradient(135deg, transparent, var(--color-primary-light));
+        /* Анимированные элементы декора */
+        .floating-elements {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .floating-element {
+            position: absolute;
+            font-size: 24px;
+            color: var(--color-megafon-light);
+            animation: floatElement 15s infinite ease-in-out;
+        }
+
+        @keyframes floatElement {
+            0%, 100% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+            33% {
+                transform: translate(10px, -10px) rotate(120deg);
+            }
+            66% {
+                transform: translate(-5px, 5px) rotate(240deg);
+            }
         }
 
         /* Адаптивность */
-        @media (max-width: 900px) {
+        @media (max-width: 1024px) {
             .form-container {
                 flex-direction: column;
                 max-width: 500px;
@@ -379,7 +583,7 @@
             }
             
             .form-image {
-                display: none;
+                min-height: 250px;
             }
             
             .form-content {
@@ -387,7 +591,7 @@
             }
         }
 
-        @media (max-width: 500px) {
+        @media (max-width: 480px) {
             .container {
                 padding: 15px;
             }
@@ -397,55 +601,34 @@
             }
             
             .form-switcher {
-                margin-bottom: 25px;
+                margin-bottom: 30px;
             }
             
             .switch-btn {
-                padding: 12px;
+                padding: 14px;
                 font-size: 14px;
             }
             
             h2 {
-                font-size: 22px;
-                margin-bottom: 25px;
+                font-size: 24px;
+                margin-bottom: 30px;
             }
             
             .input-group {
-                margin-bottom: 22px;
+                margin-bottom: 25px;
             }
             
             .input-group input {
-                padding: 14px 18px 14px 45px;
+                padding: 16px 20px 16px 50px;
             }
             
             .input-group i.input-icon {
-                left: 15px;
-                font-size: 16px;
-            }
-            
-            .input-group label {
-                left: 45px;
+                left: 18px;
+                font-size: 18px;
             }
             
             .ps5-btn {
-                padding: 15px;
-                font-size: 15px;
-            }
-        }
-
-        @media (max-width: 400px) {
-            .switch-btn {
-                flex-direction: column;
-                gap: 4px;
-                padding: 10px;
-            }
-            
-            .switch-btn i {
+                padding: 18px;
                 font-size: 16px;
             }
-            
-            h2 {
-                font-size: 20px;
-            }
         }
-    
