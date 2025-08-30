@@ -1,0 +1,82 @@
+-- Создание базы данных
+CREATE DATABASE IF NOT EXISTS knowledge_assessment;
+USE knowledge_assessment;
+
+-- Таблица пользователей
+CREATE TABLE IF NOT EXISTS users (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    role ENUM('admin', 'teacher', 'student') DEFAULT 'student',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Таблица тестов
+CREATE TABLE IF NOT EXISTS tests (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_by INT(11) NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Таблица вопросов
+CREATE TABLE IF NOT EXISTS questions (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    test_id INT(11) NOT NULL,
+    question_text TEXT NOT NULL,
+    question_type ENUM('multiple_choice', 'true_false', 'short_answer') DEFAULT 'multiple_choice',
+    options JSON,
+    correct_answer TEXT NOT NULL,
+    points INT(11) DEFAULT 1,
+    FOREIGN KEY (test_id) REFERENCES tests(id)
+);
+
+-- Таблица результатов тестов
+CREATE TABLE IF NOT EXISTS test_results (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    test_id INT(11) NOT NULL,
+    user_id INT(11) NOT NULL,
+    score INT(11) NOT NULL,
+    total_points INT(11) NOT NULL,
+    completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    answers JSON,
+    FOREIGN KEY (test_id) REFERENCES tests(id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Таблица ML моделей
+CREATE TABLE IF NOT EXISTS ml_models (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    accuracy FLOAT,
+    path VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Таблица предсказаний моделей
+CREATE TABLE IF NOT EXISTS model_predictions (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    model_id INT(11) NOT NULL,
+    test_result_id INT(11) NOT NULL,
+    prediction_data JSON,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (model_id) REFERENCES ml_models(id),
+    FOREIGN KEY (test_result_id) REFERENCES test_results(id)
+);
+
+-- Добавление тестового администратора (пароль: admin123)
+INSERT INTO users (email, password, full_name, role) VALUES 
+('admin@system.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'System Administrator', 'admin');
+
+-- Добавление тестового преподавателя (пароль: teacher123)
+INSERT INTO users (email, password, full_name, role) VALUES 
+('teacher@system.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Professor Ivanov', 'teacher');
+
+-- Добавление тестового студента (пароль: student123)
+INSERT INTO users (email, password, full_name, role) VALUES 
+('student@system.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Student Petrov', 'student');

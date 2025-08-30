@@ -1,53 +1,48 @@
 <?php
 include 'config.php';
 
-// Обработка данных формы
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $username = trim($_POST['username']);
-    $email = trim($_POST['email']);
+if ($_SERVER['REQUEST_METHOD'] == 'POST') {
+    $full_name = $_POST['full_name'];
+    $email = $_POST['email'];
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
     
-    // Проверка на пустые поля
-    if (empty($username) || empty($email) || empty($password) || empty($confirm_password)) {
-        die("Все поля обязательны для заполнения.");
-    }
-    
-    // Проверка совпадения паролей
+    // Проверяем, совпадают ли пароли
     if ($password !== $confirm_password) {
-        die("Пароли не совпадают. <a href='index.html#show-register'>Попробовать снова</a>");
+        echo json_encode([
+            'success' => false,
+            'message' => 'Пароли не совпадают.'
+        ]);
+        exit;
     }
     
-    // Проверка длины пароля
-    if (strlen($password) < 6) {
-        die("Пароль должен содержать не менее 6 символов. <a href='index.html#show-register'>Попробовать снова</a>");
+    // Проверяем, не существует ли уже пользователь с таким email
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+    $stmt->execute([$email]);
+    
+    if ($stmt->rowCount() > 0) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'Пользователь с таким email уже существует.'
+        ]);
+        exit;
     }
     
-    // Хеширование пароля
+    // Хешируем пароль и сохраняем пользователя
     $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+    $stmt = $pdo->prepare("INSERT INTO users (email, password, full_name) VALUES (?, ?, ?)");
     
-    // Проверка существования пользователя
-    $check_user = $conn->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
-    $check_user->bind_param("ss", $username, $email);
-    $check_user->execute();
-    $check_user->store_result();
-    
-    if ($check_user->num_rows > 0) {
-        die("Пользователь с таким именем или email уже существует. <a href='index.html#show-register'>Попробовать снова</a>");
-    }
-    $check_user->close();
-    
-    // Вставка нового пользователя в базу данных
-    $stmt = $conn->prepare("INSERT INTO users (username, email, password) VALUES (?, ?, ?)");
-    $stmt->bind_param("sss", $username, $email, $hashed_password);
-    
-    if ($stmt->execute()) {
-        echo "Регистрация успешна! <a href='index.html'>Войти</a>";
+    if ($stmt->execute([$email, $hashed_password, $full_name])) {
+        echo json_encode([
+            'success' => true,
+            'message' => 'Регистрация прошла успешно! Теперь вы можете войти.',
+            'redirect' => 'index.php'
+        ]);
     } else {
-        echo "Ошибка: " . $stmt->error . " <a href='index.html#show-register'>Попробовать снова</a>";
+        echo json_encode([
+            'success' => false,
+            'message' => 'Ошибка регистрации. Пожалуйста, попробуйте снова.'
+        ]);
     }
-    
-    $stmt->close();
-    $conn->close();
 }
 ?>
