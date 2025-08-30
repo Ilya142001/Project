@@ -12,14 +12,38 @@ $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
+// Обработка создания теста (если форма отправлена)
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_test'])) {
+    $title = trim($_POST['title']);
+    $description = trim($_POST['description']);
+    $is_published = isset($_POST['is_published']) ? 1 : 0;
+    
+    if (!empty($title)) {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO tests (title, description, is_published, created_by) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$title, $description, $is_published, $_SESSION['user_id']]);
+            
+            $test_id = $pdo->lastInsertId();
+            header("Location: test_edit.php?id=" . $test_id);
+            exit;
+            
+        } catch (PDOException $e) {
+            $error = "Ошибка при создании теста: " . $e->getMessage();
+        }
+    } else {
+        $error = "Название теста обязательно для заполнения";
+    }
+}
+
 // Получаем тесты в зависимости от роли пользователя
 if ($user['role'] == 'student') {
-    // Тесты для студента
+    // Тесты для студента (только опубликованные)
     $stmt = $pdo->prepare("
         SELECT t.*, u.full_name as creator_name
         FROM tests t
         JOIN users u ON t.created_by = u.id
-        WHERE t.id NOT IN (
+        WHERE t.is_published = TRUE 
+        AND t.id NOT IN (
             SELECT test_id FROM test_results WHERE user_id = ?
         )
         ORDER BY t.created_at DESC
@@ -41,8 +65,10 @@ if ($user['role'] == 'student') {
 } else if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
     // Тесты для преподавателя/администратора
     $stmt = $pdo->prepare("
-        SELECT t.*, COUNT(tr.id) as attempts,
-               COUNT(DISTINCT tr.user_id) as unique_students
+        SELECT t.*, 
+               COUNT(tr.id) as attempts,
+               COUNT(DISTINCT tr.user_id) as unique_students,
+               (SELECT COUNT(*) FROM questions WHERE test_id = t.id) as question_count
         FROM tests t
         LEFT JOIN test_results tr ON t.id = tr.test_id
         WHERE t.created_by = ?
@@ -315,6 +341,7 @@ if ($user['role'] == 'student') {
         .test-actions {
             display: flex;
             justify-content: flex-end;
+            gap: 10px;
         }
         
         .btn {
@@ -356,6 +383,15 @@ if ($user['role'] == 'student') {
             opacity: 0.9;
         }
         
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            opacity: 0.9;
+        }
+        
         /* Table */
         .data-table {
             width: 100%;
@@ -376,6 +412,265 @@ if ($user['role'] == 'student') {
         
         .data-table tr:hover {
             background-color: #f9f9f9;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: var(--light);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: var(--gray);
+        }
+        
+        /* Стили для модального окна */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s;
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 5px 25px rgba(0,0,0,0.2);
+            animation: slideIn 0.3s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--secondary);
+            color: white;
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            color: white;
+            font-weight: 500;
+        }
+        
+        .close {
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            background: none;
+            border: none;
+            opacity: 0.8;
+        }
+        
+        .close:hover {
+            opacity: 1;
+        }
+        
+        .modal-body {
+            padding: 25px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        
+        .modal-footer {
+            padding: 15px 25px;
+            border-top: 1px solid #eee;
+            text-align: right;
+            background: #f9f9f9;
+            border-radius: 0 0 10px 10px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--secondary);
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 15px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-control:focus {
+            border-color: var(--primary);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+        }
+        
+        textarea.form-control {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+        
+        .checkbox-group label {
+            margin: 0;
+            font-weight: normal;
+            color: var(--secondary);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        
+        .status-published {
+            background: var(--success);
+            color: white;
+        }
+        
+        .status-draft {
+            background: var(--gray);
+            color: white;
+        }
+        
+        /* Стили для редактора тестов */
+        .editor-container {
+            display: none;
+            margin-top: 20px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .question-editor {
+            margin-bottom: 25px;
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .question-title {
+            font-weight: 600;
+            color: var(--secondary);
+        }
+        
+        .answer-option {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border: 1px solid #eee;
+        }
+        
+        .answer-option input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        
+        .answer-option input[type="checkbox"] {
+            margin-right: 10px;
+            accent-color: var(--primary);
+        }
+        
+        .answer-option .remove-answer {
+            color: var(--accent);
+            cursor: pointer;
+            padding: 5px;
+        }
+        
+        .add-answer {
+            margin-top: 10px;
+            color: var(--primary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            font-weight: 500;
+        }
+        
+        .add-answer i {
+            margin-right: 5px;
+        }
+        
+        .question-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 13px;
         }
         
         /* Responsive */
@@ -429,6 +724,15 @@ if ($user['role'] == 'student') {
                 display: block;
                 overflow-x: auto;
             }
+            
+            .test-actions {
+                flex-direction: column;
+            }
+            
+            .modal-content {
+                margin: 10% auto;
+                width: 95%;
+            }
         }
     </style>
 </head>
@@ -480,6 +784,14 @@ if ($user['role'] == 'student') {
                 <input type="text" placeholder="Поиск тестов...">
             </div>
         </div>
+        
+        <?php if (isset($error)): ?>
+            <div class="section" style="border-left: 4px solid var(--accent);">
+                <div style="color: var(--accent); font-weight: 500;">
+                    <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
+                </div>
+            </div>
+        <?php endif; ?>
         
         <?php if ($user['role'] == 'student'): ?>
             <!-- Секция для студентов -->
@@ -551,7 +863,42 @@ if ($user['role'] == 'student') {
             <div class="section">
                 <div class="section-header">
                     <h2>Мои тесты</h2>
-                    <a href="test_create.php" class="view-all">Создать тест</a>
+                    <button class="btn btn-primary" onclick="openModal()">
+                        <i class="fas fa-plus"></i> Создать тест
+                    </button>
+                </div>
+                
+                <?php 
+                // Статистика для преподавателя
+                $total_tests = count($tests);
+                $total_questions = 0;
+                $total_attempts = 0;
+                $total_students = 0;
+                
+                foreach ($tests as $test) {
+                    $total_questions += $test['question_count'];
+                    $total_attempts += $test['attempts'];
+                    $total_students += $test['unique_students'];
+                }
+                ?>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $total_tests; ?></div>
+                        <div class="stat-label">Всего тестов</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $total_questions; ?></div>
+                        <div class="stat-label">Всего вопросов</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $total_attempts; ?></div>
+                        <div class="stat-label">Попыток прохождения</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $total_students; ?></div>
+                        <div class="stat-label">Уникальных студентов</div>
+                    </div>
                 </div>
                 
                 <?php if (count($tests) > 0): ?>
@@ -559,8 +906,10 @@ if ($user['role'] == 'student') {
                         <thead>
                             <tr>
                                 <th>Название теста</th>
+                                <th>Вопросов</th>
                                 <th>Попыток</th>
                                 <th>Уникальных студентов</th>
+                                <th>Статус</th>
                                 <th>Дата создания</th>
                                 <th>Действия</th>
                             </tr>
@@ -568,32 +917,124 @@ if ($user['role'] == 'student') {
                         <tbody>
                             <?php foreach ($tests as $test): ?>
                                 <tr>
-                                    <td><?php echo $test['title']; ?></td>
+                                    <td>
+                                        <div class="test-title"><?php echo $test['title']; ?></div>
+                                        <?php if (!empty($test['description'])): ?>
+                                        <div style="font-size: 12px; color: var(--gray); margin-top: 5px;">
+                                            <?php echo mb_strlen($test['description']) > 100 ? mb_substr($test['description'], 0, 100) . '...' : $test['description']; ?>
+                                        </div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?php echo $test['question_count']; ?></td>
                                     <td><?php echo $test['attempts']; ?></td>
                                     <td><?php echo $test['unique_students']; ?></td>
+                                    <td>
+                                        <span class="status-badge <?php echo $test['is_published'] ? 'status-published' : 'status-draft'; ?>">
+                                            <?php echo $test['is_published'] ? 'Опубликован' : 'Черновик'; ?>
+                                        </span>
+                                    </td>
                                     <td><?php echo date('d.m.Y', strtotime($test['created_at'])); ?></td>
                                     <td>
-                                        <a href="test_edit.php?id=<?php echo $test['id']; ?>" class="btn btn-primary">Редактировать</a>
-                                        <a href="test_results_view.php?id=<?php echo $test['id']; ?>" class="btn btn-success">Результаты</a>
-                                        <a href="test_delete.php?id=<?php echo $test['id']; ?>" class="btn btn-danger" onclick="return confirm('Вы уверены?')">Удалить</a>
+                                        <div class="test-actions">
+                                            <a href="test_edit.php?id=<?php echo $test['id']; ?>" class="btn btn-primary" title="Редактировать">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            <a href="test_results_view.php?id=<?php echo $test['id']; ?>" class="btn btn-success" title="Результаты">
+                                                <i class="fas fa-chart-bar"></i>
+                                            </a>
+                                            <?php if ($test['attempts'] == 0): ?>
+                                                <a href="test_delete.php?id=<?php echo $test['id']; ?>" class="btn btn-danger" title="Удалить" onclick="return confirm('Вы уверены, что хотите удалить этот тест?')">
+                                                    <i class="fas fa-trash"></i>
+                                                </a>
+                                            <?php else: ?>
+                                                <button class="btn btn-secondary" title="Нельзя удалить (есть попытки)" disabled>
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 <?php else: ?>
-                    <p>Вы еще не создали ни одного теста.</p>
+                    <p>Вы еще не создали ни одного теста. Нажмите "Создать тест" чтобы начать.</p>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
     </div>
 
+    <!-- Модальное окно создания теста -->
+    <div id="createTestModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Создание нового теста</h3>
+                <button class="close" onclick="closeModal()">&times;</button>
+            </div>
+            <form method="POST" action="">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="title">Название теста *</label>
+                        <input type="text" id="title" name="title" class="form-control" required 
+                               placeholder="Введите название теста">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="description">Описание теста</label>
+                        <textarea id="description" name="description" class="form-control" 
+                                  placeholder="Опишите содержание теста, его цели и особенности" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="is_published" name="is_published" value="1">
+                        <label for="is_published">Опубликовать тест сразу</label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+                    <button type="submit" name="create_test" class="btn btn-primary">Создать тест</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
+        // Функции для модального окна
+        function openModal() {
+            document.getElementById('createTestModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('createTestModal').style.display = 'none';
+        }
+        
+        // Закрытие модального окна при клике вне его
+        window.onclick = function(event) {
+            const modal = document.getElementById('createTestModal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+        
         // Простая интерактивность
         document.querySelectorAll('.test-item').forEach(item => {
             item.addEventListener('click', function(e) {
                 if (!e.target.classList.contains('btn')) {
                     this.querySelector('a.btn').click();
+                }
+            });
+        });
+        
+        // Поиск тестов
+        document.querySelector('.search-box input').addEventListener('input', function(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            
+            document.querySelectorAll('.test-item, .data-table tbody tr').forEach(item => {
+                const text = item.textContent.toLowerCase();
+                if (text.includes(searchTerm)) {
+                    item.style.display = '';
+                } else {
+                    item.style.display = 'none';
                 }
             });
         });
