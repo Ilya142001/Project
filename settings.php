@@ -24,18 +24,72 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_profile'])) {
     if ($stmt->rowCount() > 0) {
         $error = "Email уже используется другим пользователем.";
     } else {
-        $stmt = $pdo->prepare("UPDATE users SET full_name = ?, email = ? WHERE id = ?");
-        if ($stmt->execute([$full_name, $email, $_SESSION['user_id']])) {
-            $success = "Профиль успешно обновлен.";
-            $_SESSION['user_name'] = $full_name;
-            $_SESSION['user_email'] = $email;
+        // Обработка загрузки аватара
+        $avatar = $user['avatar']; // сохраняем текущий аватар по умолчанию
+        
+        if (isset($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK) {
+            $uploadDir = 'uploads/avatars/';
             
-            // Обновляем данные пользователя
-            $user['full_name'] = $full_name;
-            $user['email'] = $email;
-        } else {
-            $error = "Ошибка при обновлении профиля.";
+            // Создаем директорию, если ее нет
+            if (!file_exists($uploadDir)) {
+                mkdir($uploadDir, 0777, true);
+            }
+            
+            $fileExtension = pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION);
+            $fileName = 'avatar_' . $_SESSION['user_id'] . '_' . time() . '.' . $fileExtension;
+            $uploadPath = $uploadDir . $fileName;
+            
+            // Проверяем тип файла
+            $allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/jpg'];
+            if (in_array($_FILES['avatar']['type'], $allowedTypes)) {
+                // Удаляем старый аватар, если он не дефолтный
+                if ($user['avatar'] && $user['avatar'] != '1.jpg' && file_exists($user['avatar'])) {
+                    unlink($user['avatar']);
+                }
+                
+                // Перемещаем загруженный файл
+                if (move_uploaded_file($_FILES['avatar']['tmp_name'], $uploadPath)) {
+                    $avatar = $uploadPath;
+                } else {
+                    $error = "Ошибка при загрузке изображения.";
+                }
+            } else {
+                $error = "Разрешены только файлы изображений (JPG, PNG, GIF).";
+            }
         }
+        
+        if (!isset($error)) {
+            $stmt = $pdo->prepare("UPDATE users SET full_name = ?, email = ?, avatar = ? WHERE id = ?");
+            if ($stmt->execute([$full_name, $email, $avatar, $_SESSION['user_id']])) {
+                $success = "Профиль успешно обновлен.";
+                $_SESSION['user_name'] = $full_name;
+                $_SESSION['user_email'] = $email;
+                $_SESSION['user_avatar'] = $avatar;
+                
+                // Обновляем данные пользователя
+                $user['full_name'] = $full_name;
+                $user['email'] = $email;
+                $user['avatar'] = $avatar;
+            } else {
+                $error = "Ошибка при обновлении профиля.";
+            }
+        }
+    }
+}
+
+// Обработка удаления аватара
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['remove_avatar'])) {
+    if ($user['avatar'] && $user['avatar'] != '1.jpg' && file_exists($user['avatar'])) {
+        unlink($user['avatar']);
+    }
+    
+    $stmt = $pdo->prepare("UPDATE users SET avatar = '1.jpg' WHERE id = ?");
+    if ($stmt->execute([$_SESSION['user_id']])) {
+        $success = "Аватар успешно удален.";
+        $_SESSION['user_avatar'] = '1.jpg';
+        $user['avatar'] = '1.jpg';
+    } else {
+        $error = "Ошибка при удалении аватара.";
     }
 }
 
@@ -70,7 +124,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
     <title>Настройки - Система интеллектуальной оценки знаний</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Стили из dashboard.php */
         * {
             margin: 0;
             padding: 0;
@@ -348,6 +401,88 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
             display: block;
         }
         
+        /* Новые стили для загрузки аватара */
+        .avatar-upload {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .avatar-preview {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            overflow: hidden;
+            margin-right: 20px;
+            border: 3px solid #e2e8f0;
+            position: relative;
+        }
+        
+        .avatar-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .avatar-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .avatar-upload-btn {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        
+        .avatar-upload-btn input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        
+        .btn-small {
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+        
+        .btn-danger {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        
+        /* Form controls */
+        .form-control {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-control:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+        
+        /* Checkbox styles */
+        input[type="checkbox"] {
+            margin-right: 8px;
+            width: 18px;
+            height: 18px;
+            vertical-align: middle;
+        }
+        
         /* Responsive */
         @media (max-width: 992px) {
             .sidebar {
@@ -378,6 +513,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
             .main-content {
                 margin-left: 70px;
             }
+            
+            .avatar-upload {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .avatar-preview {
+                margin-right: 0;
+                margin-bottom: 15px;
+            }
         }
         
         @media (max-width: 768px) {
@@ -393,6 +538,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
             .tab {
                 border-bottom: 1px solid #eee;
             }
+            
+            .avatar-actions {
+                flex-direction: row;
+                justify-content: center;
+                flex-wrap: wrap;
+            }
         }
     </style>
 </head>
@@ -404,10 +555,35 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
         </div>
         
         <div class="user-info">
-            <div class="user-avatar"><?php echo strtoupper(substr($user['full_name'], 0, 1)); ?></div>
+            <div class="user-avatar">
+                <?php 
+                $avatarPath = !empty($user['avatar']) ? $user['avatar'] : '1.jpg';
+                
+                // Проверяем, существует ли файл
+                if (file_exists($avatarPath)) {
+                    echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
+                } else {
+                    // Если файл не существует, показываем первую букву имени
+                    $firstName = $user['full_name'];
+                    // Преобразуем в UTF-8 на случай проблем с кодировкой
+                    if (function_exists('mb_convert_encoding')) {
+                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                    }
+                    $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+                    echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
+                }
+                ?>
+            </div>
             <div class="user-details">
-                <h3>Привет, <?php echo explode(' ', $user['full_name'])[0]; ?></h3>
-                <p><?php echo $user['email']; ?></p>
+                <h3>Привет, <?php 
+                    $nameParts = explode(' ', $user['full_name']);
+                    $firstName = $nameParts[1];
+                    if (function_exists('mb_convert_encoding')) {
+                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                    }
+                    echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
+                ?></h3>
+                <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
                 <span class="role-badge role-<?php echo $user['role']; ?>">
                     <?php 
                     if ($user['role'] == 'admin') echo 'Администратор';
@@ -470,8 +646,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
                     <h2>Личная информация</h2>
                 </div>
                 
-                <form method="POST" action="">
+                <form method="POST" action="" enctype="multipart/form-data">
                     <input type="hidden" name="update_profile" value="1">
+                    
+                    <div class="avatar-upload">
+                        <div class="avatar-preview">
+                            <img src="<?php echo !empty($user['avatar']) ? $user['avatar'] : '1.jpg'; ?>" alt="Аватар" id="avatarPreview">
+                        </div>
+                        <div class="avatar-actions">
+                            <div class="avatar-upload-btn">
+                                <button type="button" class="btn btn-primary btn-small">
+                                    <i class="fas fa-upload"></i> Выбрать фото
+                                </button>
+                                <input type="file" name="avatar" id="avatarInput" accept="image/*" onchange="previewAvatar(this)">
+                            </div>
+                            <?php if ($user['avatar'] && $user['avatar'] != '1.jpg'): ?>
+                            <form method="POST" action="" style="display:inline;">
+                                <input type="hidden" name="remove_avatar" value="1">
+                                <button type="submit" class="btn btn-danger btn-small">
+                                    <i class="fas fa-trash"></i> Удалить фото
+                                </button>
+                            </form>
+                            <?php endif; ?>
+                        </div>
+                    </div>
                     
                     <div class="form-group">
                         <label for="full_name">Полное имя</label>
@@ -624,6 +822,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['change_password'])) {
                 document.getElementById(tabId).classList.add('active');
             });
         });
+        
+        // Предпросмотр аватара
+        function previewAvatar(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('avatarPreview').src = e.target.result;
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
         
         // Сохранение предпочтений
         function savePreferences() {

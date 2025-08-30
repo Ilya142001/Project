@@ -511,7 +511,12 @@ if ($user['role'] == 'student') {
         .activity-table tr:hover {
             background-color: #f9f9f9;
         }
-        
+        .user-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
         /* Responsive */
         @media (max-width: 992px) {
             .sidebar {
@@ -578,19 +583,44 @@ if ($user['role'] == 'student') {
         </div>
         
         <div class="user-info">
-            <div class="user-avatar"><?php echo strtoupper(substr($user['full_name'], 0, 1)); ?></div>
-            <div class="user-details">
-                <h3>Привет, <?php echo explode(' ', $user['full_name'])[0]; ?></h3>
-                <p><?php echo $user['email']; ?></p>
-                <span class="role-badge role-<?php echo $user['role']; ?>">
-                    <?php 
-                    if ($user['role'] == 'admin') echo 'Администратор';
-                    else if ($user['role'] == 'teacher') echo 'Преподаватель';
-                    else echo 'Студент';
-                    ?>
-                </span>
-            </div>
-        </div>
+    <div class="user-avatar">
+        <?php 
+        $avatarPath = !empty($user['avatar']) ? $user['avatar'] : '1.jpg';
+        
+        // Проверяем, существует ли файл
+        if (file_exists($avatarPath)) {
+            echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
+        } else {
+            // Если файл не существует, показываем первую букву имени
+            $firstName = $user['full_name'];
+            // Преобразуем в UTF-8 на случай проблем с кодировкой
+            if (function_exists('mb_convert_encoding')) {
+                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+            }
+            $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+            echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
+        }
+        ?>
+    </div>
+    <div class="user-details">
+        <h3>Привет, <?php 
+            $nameParts = explode(' ', $user['full_name']);
+            $firstName = $nameParts[1];
+            if (function_exists('mb_convert_encoding')) {
+                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+            }
+            echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
+        ?></h3>
+        <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
+        <span class="role-badge role-<?php echo $user['role']; ?>">
+            <?php 
+            if ($user['role'] == 'admin') echo 'Администратор';
+            else if ($user['role'] == 'teacher') echo 'Преподаватель';
+            else echo 'Студент';
+            ?>
+        </span>
+    </div>
+</div>
         
         <ul class="nav-links">
             <li><a href="dashboard.php" class="active"><i class="fas fa-th-large"></i> <span>Главная</span></a></li>

@@ -1,6 +1,15 @@
 <?php
 include 'config.php';
+// Показываем сообщения об успехе/ошибке
+if (isset($_SESSION['success_message'])) {
+    $success_message = $_SESSION['success_message'];
+    unset($_SESSION['success_message']);
+}
 
+if (isset($_SESSION['error_message'])) {
+    $error_message = $_SESSION['error_message'];
+    unset($_SESSION['error_message']);
+}
 // Проверяем, авторизован ли пользователь
 if (!isset($_SESSION['user_id'])) {
     header("Location: index.php");
@@ -672,6 +681,147 @@ if ($user['role'] == 'student') {
             padding: 6px 12px;
             font-size: 13px;
         }
+        /* Стили для модального окна редактирования */
+.modal-content.large {
+    max-width: 95%;
+    width: 1200px;
+    height: 90vh;
+}
+
+.modal-body.scrollable {
+    height: calc(90vh - 130px);
+    overflow-y: auto;
+}
+/* Анимации для удаления */
+@keyframes fadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-20px); height: 0; padding: 0; margin: 0; }
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.deleting {
+    animation: fadeOut 0.5s ease forwards;
+    overflow: hidden;
+}
+
+.shake {
+    animation: shake 0.5s ease;
+}
+
+/* Стили для модального окна подтверждения */
+.confirm-modal {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.7);
+    animation: fadeIn 0.3s;
+}
+
+.confirm-modal-content {
+    background: white;
+    margin: 15% auto;
+    padding: 0;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    animation: slideIn 0.3s;
+    overflow: hidden;
+}
+
+.confirm-modal-header {
+    background: linear-gradient(135deg, #e74c3c, #c0392b);
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
+
+.confirm-modal-header i {
+    font-size: 48px;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.confirm-modal-body {
+    padding: 25px;
+    text-align: center;
+}
+
+.confirm-modal-footer {
+    padding: 15px 25px;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    background: #f9f9f9;
+}
+
+.confirm-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    min-width: 100px;
+}
+
+.confirm-btn-danger {
+    background: #e74c3c;
+    color: white;
+}
+
+.confirm-btn-danger:hover {
+    background: #c0392b;
+    transform: translateY(-2px);
+}
+
+.confirm-btn-secondary {
+    background: #95a5a6;
+    color: white;
+}
+
+.confirm-btn-secondary:hover {
+    background: #7f8c8d;
+    transform: translateY(-2px);
+}
+
+/* Эффект для кнопки удаления */
+.btn-danger {
+    transition: all 0.3s;
+}
+
+.btn-danger:hover {
+    transform: scale(1.1);
+    box-shadow: 0 5px 15px rgba(231, 76, 60, 0.3);
+}
+
+/* Адаптивность для модального окна */
+@media (max-width: 1300px) {
+    .modal-content.large {
+        width: 95%;
+        margin: 2% auto;
+    }
+}
+
+@media (max-width: 768px) {
+    .modal-content.large {
+        width: 98%;
+        height: 95vh;
+    }
+    
+    .modal-body.scrollable {
+        height: calc(95vh - 130px);
+    }
+}
         
         /* Responsive */
         @media (max-width: 992px) {
@@ -743,20 +893,45 @@ if ($user['role'] == 'student') {
             <h1>Оценка знаний AI</h1>
         </div>
         
-        <div class="user-info">
-            <div class="user-avatar"><?php echo strtoupper(substr($user['full_name'], 0, 1)); ?></div>
-            <div class="user-details">
-                <h3>Привет, <?php echo explode(' ', $user['full_name'])[0]; ?></h3>
-                <p><?php echo $user['email']; ?></p>
-                <span class="role-badge role-<?php echo $user['role']; ?>">
-                    <?php 
-                    if ($user['role'] == 'admin') echo 'Администратор';
-                    else if ($user['role'] == 'teacher') echo 'Преподаватель';
-                    else echo 'Студент';
-                    ?>
-                </span>
-            </div>
-        </div>
+         <div class="user-info">
+    <div class="user-avatar">
+        <?php 
+        $avatarPath = !empty($user['avatar']) ? $user['avatar'] : '1.jpg';
+        
+        // Проверяем, существует ли файл
+        if (file_exists($avatarPath)) {
+            echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
+        } else {
+            // Если файл не существует, показываем первую букву имени
+            $firstName = $user['full_name'];
+            // Преобразуем в UTF-8 на случай проблем с кодировкой
+            if (function_exists('mb_convert_encoding')) {
+                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+            }
+            $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+            echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
+        }
+        ?>
+    </div>
+    <div class="user-details">
+        <h3>Привет, <?php 
+            $nameParts = explode(' ', $user['full_name']);
+            $firstName = $nameParts[1];
+            if (function_exists('mb_convert_encoding')) {
+                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+            }
+            echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
+        ?></h3>
+        <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
+        <span class="role-badge role-<?php echo $user['role']; ?>">
+            <?php 
+            if ($user['role'] == 'admin') echo 'Администратор';
+            else if ($user['role'] == 'teacher') echo 'Преподаватель';
+            else echo 'Студент';
+            ?>
+        </span>
+    </div>
+</div>
         
         <ul class="nav-links">
             <li><a href="dashboard.php"><i class="fas fa-th-large"></i> <span>Главная</span></a></li>
@@ -936,21 +1111,17 @@ if ($user['role'] == 'student') {
                                     <td><?php echo date('d.m.Y', strtotime($test['created_at'])); ?></td>
                                     <td>
                                         <div class="test-actions">
-                                            <a href="test_edit.php?id=<?php echo $test['id']; ?>" class="btn btn-primary" title="Редактировать">
-                                                <i class="fas fa-edit"></i>
+                                            <a href="javascript:void(0)" onclick="openTestEditor(<?php echo $test['id']; ?>, '<?php echo addslashes($test['title']); ?>')" 
+                                                    class="btn btn-primary" title="Редактировать">
+                                                        <i class="fas fa-edit"></i>
                                             </a>
                                             <a href="test_results_view.php?id=<?php echo $test['id']; ?>" class="btn btn-success" title="Результаты">
                                                 <i class="fas fa-chart-bar"></i>
                                             </a>
-                                            <?php if ($test['attempts'] == 0): ?>
-                                                <a href="test_delete.php?id=<?php echo $test['id']; ?>" class="btn btn-danger" title="Удалить" onclick="return confirm('Вы уверены, что хотите удалить этот тест?')">
-                                                    <i class="fas fa-trash"></i>
-                                                </a>
-                                            <?php else: ?>
-                                                <button class="btn btn-secondary" title="Нельзя удалить (есть попытки)" disabled>
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            <?php endif; ?>
+                                           <a href="test_delete.php?id=<?php echo $test['id']; ?>" class="btn btn-danger" title="Удалить" 
+   onclick="return confirm('Вы уверены, что хотите удалить тест \'<?php echo addslashes($test['title']); ?>\'? Все связанные вопросы и результаты также будут удалены!')">
+    <i class="fas fa-trash"></i>
+</a>
                                         </div>
                                     </td>
                                 </tr>
@@ -1038,6 +1209,209 @@ if ($user['role'] == 'student') {
                 }
             });
         });
+        // Функции для модального окна редактирования теста
+function openTestEditor(testId, testTitle) {
+    document.getElementById('editTestModal').style.display = 'block';
+    document.getElementById('modalTestTitle').textContent = 'Редактирование теста: ' + testTitle;
+    
+    // Загружаем контент редактора теста через AJAX
+    fetch('test_edit_modal.php?id=' + testId)
+        .then(response => response.text())
+        .then(data => {
+            document.getElementById('testEditorContent').innerHTML = data;
+        })
+        .catch(error => {
+            document.getElementById('testEditorContent').innerHTML = 
+                '<div class="error">Ошибка загрузки редактора: ' + error + '</div>';
+        });
+}
+
+function closeEditModal() {
+    document.getElementById('editTestModal').style.display = 'none';
+    // Очищаем контент при закрытии
+    document.getElementById('testEditorContent').innerHTML = 
+        '<div style="text-align: center; padding: 40px;">' +
+        '<i class="fas fa-spinner fa-spin" style="font-size: 24px; color: var(--primary);"></i>' +
+        '<p>Загрузка редактора теста...</p>' +
+        '</div>';
+}
+
+// Обновите обработчик клика вне модального окна
+window.onclick = function(event) {
+    const modal = document.getElementById('createTestModal');
+    const editModal = document.getElementById('editTestModal');
+    
+    if (event.target === modal) {
+        closeModal();
+    }
+    if (event.target === editModal) {
+        closeEditModal();
+    }
+}// Переменные для управления удалением
+let currentDeleteId = null;
+let currentDeleteElement = null;
+
+// Функция для открытия модального окна подтверждения
+function showDeleteConfirm(testId, testTitle, element) {
+    currentDeleteId = testId;
+    currentDeleteElement = element.closest('tr') || element.closest('.test-item');
+    
+    document.getElementById('confirmDeleteText').textContent = 
+        `Вы уверены, что хотите удалить тест "${testTitle}"?`;
+    
+    document.getElementById('confirmDeleteModal').style.display = 'block';
+}
+
+// Функция для закрытия модального окна
+function closeConfirmModal() {
+    document.getElementById('confirmDeleteModal').style.display = 'none';
+    currentDeleteId = null;
+    currentDeleteElement = null;
+}
+
+// Функция для подтверждения удаления
+function confirmDelete() {
+    if (!currentDeleteId) return;
+    
+    // Добавляем класс для анимации
+    if (currentDeleteElement) {
+        currentDeleteElement.classList.add('deleting');
+    }
+    
+    // Закрываем модальное окно
+    closeConfirmModal();
+    
+    // Отправляем запрос на удаление через 300ms (чтобы анимация успела проиграться)
+    setTimeout(() => {
+        window.location.href = `test_delete.php?id=${currentDeleteId}`;
+    }, 500);
+}
+
+// Функция для удаления с AJAX (более современный подход)
+async function deleteTestAjax(testId, element) {
+    try {
+        const response = await fetch(`test_delete.php?id=${testId}`);
+        const result = await response.text();
+        
+        if (response.ok) {
+            // Анимация удаления
+            const item = element.closest('tr') || element.closest('.test-item');
+            item.classList.add('deleting');
+            
+            // Полное удаление из DOM после анимации
+            setTimeout(() => {
+                item.remove();
+                // Показываем уведомление об успехе
+                showNotification('Тест успешно удален!', 'success');
+            }, 500);
+        } else {
+            throw new Error(result);
+        }
+    } catch (error) {
+        console.error('Ошибка удаления:', error);
+        showNotification('Ошибка при удалении теста', 'error');
+    }
+}
+
+// Функция для показа уведомлений
+function showNotification(message, type = 'info') {
+    // Создаем элемент уведомления
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        border-radius: 8px;
+        color: white;
+        font-weight: 500;
+        z-index: 3000;
+        animation: slideInRight 0.3s ease;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    `;
+    
+    if (type === 'success') {
+        notification.style.background = 'linear-gradient(135deg, #2ecc71, #27ae60)';
+    } else if (type === 'error') {
+        notification.style.background = 'linear-gradient(135deg, #e74c3c, #c0392b)';
+    } else {
+        notification.style.background = 'linear-gradient(135deg, #3498db, #2980b9)';
+    }
+    
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    // Автоматическое скрытие через 3 секунды
+    setTimeout(() => {
+        notification.style.animation = 'fadeOut 0.5s ease forwards';
+        setTimeout(() => notification.remove(), 500);
+    }, 3000);
+}
+
+// Анимация для уведомлений
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateX(0); }
+        to { opacity: 0; transform: translateX(100%); }
+    }
+`;
+document.head.appendChild(style);
+
+// Закрытие модального окна при клике вне его
+window.onclick = function(event) {
+    const modal = document.getElementById('createTestModal');
+    const editModal = document.getElementById('editTestModal');
+    const confirmModal = document.getElementById('confirmDeleteModal');
+    
+    if (event.target === modal) closeModal();
+    if (event.target === editModal) closeEditModal();
+    if (event.target === confirmModal) closeConfirmModal();
+}
     </script>
+    <!-- Модальное окно редактирования теста -->
+<div id="editTestModal" class="modal">
+    <div class="modal-content" style="max-width: 95%; width: 1200px; height: 90vh;">
+        <div class="modal-header">
+            <h3 id="modalTestTitle">Редактирование теста</h3>
+            <button class="close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="height: calc(90vh - 130px); overflow-y: auto;">
+            <div id="testEditorContent">
+                <div style="text-align: center; padding: 40px;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: var(--primary);"></i>
+                    <p>Загрузка редактора теста...</p>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Закрыть</button>
+        </div>
+    </div>
+</div>
+<!-- Модальное окно подтверждения удаления -->
+<div id="confirmDeleteModal" class="confirm-modal">
+    <div class="confirm-modal-content">
+        <div class="confirm-modal-header">
+            <i class="fas fa-exclamation-triangle"></i>
+            <h3>Подтверждение удаления</h3>
+        </div>
+        <div class="confirm-modal-body">
+            <p id="confirmDeleteText">Вы уверены, что хотите удалить этот тест?</p>
+            <p style="color: #e74c3c; font-size: 14px; margin-top: 10px;">
+                <i class="fas fa-info-circle"></i> Все связанные вопросы и результаты также будут удалены!
+            </p>
+        </div>
+        <div class="confirm-modal-footer">
+            <button class="confirm-btn confirm-btn-secondary" onclick="closeConfirmModal()">Отмена</button>
+            <button class="confirm-btn confirm-btn-danger" onclick="confirmDelete()">Удалить</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

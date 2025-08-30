@@ -80,3 +80,348 @@ INSERT INTO users (email, password, full_name, role) VALUES
 -- Добавление тестового студента (пароль: student123)
 INSERT INTO users (email, password, full_name, role) VALUES 
 ('student@system.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Student Petrov', 'student');
+
+____________________________
+UPDATE 2
+____________________________
+-- Создание базы данных
+CREATE DATABASE IF NOT EXISTS knowledge_assessment CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE knowledge_assessment;
+
+-- Таблица пользователей
+CREATE TABLE IF NOT EXISTS users (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    role ENUM('admin', 'teacher', 'student') DEFAULT 'student',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email (email),
+    INDEX idx_role (role)
+);
+
+-- Таблица тестов
+CREATE TABLE IF NOT EXISTS tests (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    created_by INT(11) NOT NULL,
+    time_limit INT(11) DEFAULT 30,
+    settings JSON,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_created_by (created_by),
+    INDEX idx_created_at (created_at)
+);
+
+-- Таблица вопросов (обновленная структура)
+CREATE TABLE IF NOT EXISTS questions (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    test_id INT(11) NOT NULL,
+    question_text TEXT NOT NULL,
+    question_type ENUM('multiple_choice', 'text') DEFAULT 'multiple_choice',
+    points INT(11) DEFAULT 1,
+    sort_order INT(11) DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE,
+    INDEX idx_test_id (test_id),
+    INDEX idx_sort_order (sort_order)
+);
+
+-- Таблица вариантов ответов
+CREATE TABLE IF NOT EXISTS question_options (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    question_id INT(11) NOT NULL,
+    option_text TEXT NOT NULL,
+    is_correct BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+    INDEX idx_question_id (question_id),
+    INDEX idx_is_correct (is_correct)
+);
+
+-- Таблица результатов тестов
+CREATE TABLE IF NOT EXISTS test_results (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    test_id INT(11) NOT NULL,
+    user_id INT(11) NOT NULL,
+    score INT(11) NOT NULL,
+    total_points INT(11) NOT NULL,
+    completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    answers JSON,
+    time_spent INT(11) DEFAULT 0,
+    FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_test_id (test_id),
+    INDEX idx_user_id (user_id),
+    INDEX idx_completed_at (completed_at)
+);
+
+-- Таблица сессий тестирования
+CREATE TABLE IF NOT EXISTS test_sessions (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    test_id INT(11) NOT NULL,
+    user_id INT(11) NOT NULL,
+    start_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    end_time DATETIME NULL,
+    status ENUM('in_progress', 'completed', 'expired') DEFAULT 'in_progress',
+    current_question INT(11) DEFAULT 1,
+    answers JSON,
+    FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_test_user (test_id, user_id),
+    INDEX idx_status (status)
+);
+
+-- Таблица ML моделей
+CREATE TABLE IF NOT EXISTS ml_models (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    accuracy FLOAT,
+    path VARCHAR(255) NOT NULL,
+    is_active BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_is_active (is_active)
+);
+
+-- Таблица предсказаний моделей
+CREATE TABLE IF NOT EXISTS model_predictions (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    model_id INT(11) NOT NULL,
+    test_result_id INT(11) NOT NULL,
+    prediction_data JSON,
+    confidence FLOAT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (model_id) REFERENCES ml_models(id) ON DELETE CASCADE,
+    FOREIGN KEY (test_result_id) REFERENCES test_results(id) ON DELETE CASCADE,
+    INDEX idx_model_id (model_id),
+    INDEX idx_test_result_id (test_result_id)
+);
+
+-- Таблица логов действий
+CREATE TABLE IF NOT EXISTS activity_logs (
+    id INT(11) AUTO_INCREMENT PRIMARY KEY,
+    user_id INT(11) NOT NULL,
+    action VARCHAR(100) NOT NULL,
+    description TEXT,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_id (user_id),
+    INDEX idx_action (action),
+    INDEX idx_created_at (created_at)
+);
+
+-- Добавление тестового администратора (пароль: admin123)
+INSERT INTO users (email, password, full_name, role) VALUES 
+('admin@system.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'System Administrator', 'admin')
+ON DUPLICATE KEY UPDATE role = 'admin';
+
+-- Добавление тестового преподавателя (пароль: teacher123)
+INSERT INTO users (email, password, full_name, role) VALUES 
+('teacher@system.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Professor Ivanov', 'teacher')
+ON DUPLICATE KEY UPDATE role = 'teacher';
+
+-- Добавление тестового студента (пароль: student123)
+INSERT INTO users (email, password, full_name, role) VALUES 
+('student@system.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Student Petrov', 'student')
+ON DUPLICATE KEY UPDATE role = 'student';
+
+-- Добавление тестового теста
+INSERT INTO tests (title, description, created_by, time_limit) 
+SELECT 'Первый тест', 'Это демонстрационный тест для проверки системы', id, 45 
+FROM users WHERE email = 'teacher@system.com'
+ON DUPLICATE KEY UPDATE title = 'Первый тест';
+
+-- Добавление демонстрационных вопросов
+INSERT INTO questions (test_id, question_text, question_type, points, sort_order) 
+SELECT t.id, 'Что такое PHP?', 'multiple_choice', 2, 1 
+FROM tests t 
+WHERE t.title = 'Первый тест'
+ON DUPLICATE KEY UPDATE question_text = 'Что такое PHP?';
+
+INSERT INTO questions (test_id, question_text, question_type, points, sort_order) 
+SELECT t.id, 'Объясните принципы ООП', 'text', 5, 2 
+FROM tests t 
+WHERE t.title = 'Первый тест'
+ON DUPLICATE KEY UPDATE question_text = 'Объясните принципы ООП';
+
+-- Добавление вариантов ответов для первого вопроса
+INSERT INTO question_options (question_id, option_text, is_correct) 
+SELECT q.id, 'Язык программирования', TRUE 
+FROM questions q 
+WHERE q.question_text = 'Что такое PHP?'
+ON DUPLICATE KEY UPDATE option_text = 'Язык программирования';
+
+INSERT INTO question_options (question_id, option_text, is_correct) 
+SELECT q.id, 'База данных', FALSE 
+FROM questions q 
+WHERE q.question_text = 'Что такое PHP?'
+ON DUPLICATE KEY UPDATE option_text = 'База данных';
+
+INSERT INTO question_options (question_id, option_text, is_correct) 
+SELECT q.id, 'Фреймворк', FALSE 
+FROM questions q 
+WHERE q.question_text = 'Что такое PHP?'
+ON DUPLICATE KEY UPDATE option_text = 'Фреймворк';
+
+INSERT INTO question_options (question_id, option_text, is_correct) 
+SELECT q.id, 'Операционная система', FALSE 
+FROM questions q 
+WHERE q.question_text = 'Что такое PHP?'
+ON DUPLICATE KEY UPDATE option_text = 'Операционная система';
+
+-- Создание пользователя для базы данных (если нужно)
+CREATE USER IF NOT EXISTS 'assessment_user'@'localhost' IDENTIFIED BY 'secure_password_123';
+GRANT ALL PRIVILEGES ON knowledge_assessment.* TO 'assessment_user'@'localhost';
+FLUSH PRIVILEGES;
+
+-- Создание представлений для удобства
+CREATE OR REPLACE VIEW view_test_details AS
+SELECT 
+    t.id as test_id,
+    t.title as test_title,
+    t.description as test_description,
+    t.time_limit,
+    t.created_at as test_created,
+    u.id as author_id,
+    u.full_name as author_name,
+    u.email as author_email,
+    COUNT(DISTINCT q.id) as question_count,
+    SUM(q.points) as total_points
+FROM tests t
+LEFT JOIN users u ON t.created_by = u.id
+LEFT JOIN questions q ON t.id = q.test_id
+GROUP BY t.id;
+
+CREATE OR REPLACE VIEW view_question_options AS
+SELECT 
+    q.id as question_id,
+    q.question_text,
+    q.question_type,
+    q.points,
+    q.sort_order,
+    t.id as test_id,
+    t.title as test_title,
+    GROUP_CONCAT(
+        CASE WHEN o.is_correct THEN CONCAT('✓ ', o.option_text) 
+             ELSE CONCAT('○ ', o.option_text) END 
+        ORDER BY o.id SEPARATOR '\n'
+    ) as options_list,
+    SUM(CASE WHEN o.is_correct THEN 1 ELSE 0 END) as correct_options_count
+FROM questions q
+LEFT JOIN tests t ON q.test_id = t.id
+LEFT JOIN question_options o ON q.id = o.question_id
+GROUP BY q.id;
+
+-- Создание процедур для часто используемых операций
+DELIMITER //
+
+CREATE PROCEDURE sp_get_test_questions(IN test_id_param INT)
+BEGIN
+    SELECT 
+        q.id,
+        q.question_text,
+        q.question_type,
+        q.points,
+        q.sort_order,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'id', o.id,
+                'option_text', o.option_text,
+                'is_correct', o.is_correct
+            )
+        ) as options
+    FROM questions q
+    LEFT JOIN question_options o ON q.id = o.question_id
+    WHERE q.test_id = test_id_param
+    GROUP BY q.id
+    ORDER BY q.sort_order ASC;
+END //
+
+CREATE PROCEDURE sp_calculate_test_result(IN test_id_param INT, IN user_id_param INT)
+BEGIN
+    DECLARE total_score INT DEFAULT 0;
+    DECLARE total_possible INT DEFAULT 0;
+    
+    -- Рассчитываем результаты
+    SELECT 
+        SUM(CASE WHEN user_answer = correct_answer THEN q.points ELSE 0 END),
+        SUM(q.points)
+    INTO total_score, total_possible
+    FROM (
+        -- Здесь должна быть логика сравнения ответов пользователя с правильными
+        -- Это упрощенная версия
+        SELECT 0 as user_answer, 1 as correct_answer, 2 as points
+    ) as result_data;
+    
+    -- Сохраняем результат
+    INSERT INTO test_results (test_id, user_id, score, total_points)
+    VALUES (test_id_param, user_id_param, total_score, total_possible);
+    
+    SELECT total_score as score, total_possible as total_points;
+END //
+
+DELIMITER ;
+
+-- Создание триггеров для автоматических действий
+DELIMITER //
+
+CREATE TRIGGER tr_after_question_insert
+AFTER INSERT ON questions
+FOR EACH ROW
+BEGIN
+    -- Автоматически обновляем время изменения теста
+    UPDATE tests SET updated_at = NOW() WHERE id = NEW.test_id;
+    
+    -- Логируем действие
+    INSERT INTO activity_logs (user_id, action, description)
+    VALUES (NEW.test_id, 'QUESTION_ADDED', CONCAT('Добавлен вопрос ID: ', NEW.id));
+END //
+
+CREATE TRIGGER tr_after_test_result_insert
+AFTER INSERT ON test_results
+FOR EACH ROW
+BEGIN
+    -- Обновляем статистику пользователя
+    UPDATE users 
+    SET 
+        last_activity = NOW(),
+        tests_taken = COALESCE(tests_taken, 0) + 1
+    WHERE id = NEW.user_id;
+    
+    -- Логируем завершение теста
+    INSERT INTO activity_logs (user_id, action, description)
+    VALUES (NEW.user_id, 'TEST_COMPLETED', 
+            CONCAT('Тест ID: ', NEW.test_id, ', Результат: ', NEW.score, '/', NEW.total_points));
+END //
+
+DELIMITER ;
+
+-- Добавляем недостающие столбцы если они еще не существуют
+ALTER TABLE users 
+ADD COLUMN IF NOT EXISTS last_activity DATETIME NULL AFTER created_at,
+ADD COLUMN IF NOT EXISTS tests_taken INT(11) DEFAULT 0 AFTER last_activity;
+
+ALTER TABLE tests 
+ADD COLUMN IF NOT EXISTS updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at,
+ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE AFTER settings;
+
+-- Создание индексов для оптимизации
+CREATE INDEX IF NOT EXISTS idx_users_activity ON users(last_activity);
+CREATE INDEX IF NOT EXISTS idx_tests_active ON tests(is_active, created_at);
+CREATE INDEX IF NOT EXISTS idx_questions_test_order ON questions(test_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_test_results_user_test ON test_results(user_id, test_id);
+
+-- Вывод информации о созданной базе
+SELECT 'База данных knowledge_assessment успешно создана и настроена!' as status;
+
+-- Показать структуру основных таблиц
+SHOW TABLES;
+
+-- Показать пользователей системы
+SELECT id, email, full_name, role, created_at FROM users;
