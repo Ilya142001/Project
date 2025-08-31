@@ -425,3 +425,39 @@ SHOW TABLES;
 
 -- Показать пользователей системы
 SELECT id, email, full_name, role, created_at FROM users;
+
+________________________________________
+ДОП К ТАБЛИЦЕ ВЫШЕ
+-- Таблица связи тестов и вопросов (многие-ко-многим)
+CREATE TABLE test_questions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    test_id INT NOT NULL,
+    question_id INT NOT NULL,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (test_id) REFERENCES tests(id) ON DELETE CASCADE,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_test_question (test_id, question_id)
+);
+
+-- Таблица вопросов (если еще не создана)
+CREATE TABLE questions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    question_text TEXT NOT NULL,
+    question_type ENUM('text', 'multiple_choice') DEFAULT 'text',
+    points INT DEFAULT 1,
+    created_by INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Таблица вариантов ответов (если еще не создана)
+CREATE TABLE question_options (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    question_id INT NOT NULL,
+    option_text TEXT NOT NULL,
+    is_correct TINYINT(1) DEFAULT 0,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (question_id) REFERENCES questions(id) ON DELETE CASCADE
+);
