@@ -640,7 +640,13 @@ if ($user['role'] == 'student') {
         <div class="header">
             <div class="welcome">
                 <h2>Система интеллектуальной оценки знаний</h2>
-                <p>Добро пожаловать, <?php echo $user['full_name']; ?>. Вот ваша статистика.</p>
+                <?php
+$words = explode(' ', $user['full_name']);
+$second_word = $words[1] ?? '';
+$third_word = $words[2] ?? '';
+
+echo "<p>Добро пожаловать. $second_word $third_word</p>";
+?>
             </div>
             
             <div class="search-box">

@@ -31,10 +31,34 @@ if (!$test) {
     exit;
 }
 
-// Получаем вопросы теста
-$stmt = $pdo->prepare("SELECT * FROM questions WHERE test_id = ? ORDER BY sort_order ASC");
-$stmt->execute([$test_id]);
-$questions = $stmt->fetchAll();
+// Проверяем наличие столбца sort_order и добавляем его если нужно
+try {
+    $stmt = $pdo->query("SELECT sort_order FROM questions LIMIT 1");
+} catch (PDOException $e) {
+    // Если столбец не существует, добавляем его
+    if ($e->getCode() == '42S22') {
+        $pdo->query("ALTER TABLE questions ADD COLUMN sort_order INT DEFAULT 0 AFTER points");
+        
+        // Устанавливаем значения по умолчанию для существующих записей
+        $pdo->query("UPDATE questions SET sort_order = id WHERE sort_order IS NULL OR sort_order = 0");
+    }
+}
+
+// Получаем вопросы теста с сортировкой по sort_order, если столбец существует
+try {
+    $stmt = $pdo->prepare("SELECT * FROM questions WHERE test_id = ? ORDER BY sort_order ASC, id ASC");
+    $stmt->execute([$test_id]);
+    $questions = $stmt->fetchAll();
+} catch (PDOException $e) {
+    // Если произошла ошибка из-за отсутствия столбца, получаем без сортировки
+    if ($e->getCode() == '42S22') {
+        $stmt = $pdo->prepare("SELECT * FROM questions WHERE test_id = ? ORDER BY id ASC");
+        $stmt->execute([$test_id]);
+        $questions = $stmt->fetchAll();
+    } else {
+        throw $e;
+    }
+}
 
 // Обработка добавления вопроса
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_question'])) {
@@ -112,6 +136,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
     $order = $_POST['order'];
     
     try {
+        // Проверяем наличие столбца sort_order
+        $stmt = $pdo->query("SELECT sort_order FROM questions LIMIT 1");
+        
         foreach ($order as $sort_order => $question_id) {
             $stmt = $pdo->prepare("UPDATE questions SET sort_order = ? WHERE id = ? AND test_id = ?");
             $stmt->execute([$sort_order, $question_id, $test_id]);
@@ -121,7 +148,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         exit;
         
     } catch (PDOException $e) {
-        $error = "Ошибка при обновлении порядка: " . $e->getMessage();
+        // Если столбец не существует, игнорируем обновление порядка
+        if ($e->getCode() != '42S22') {
+            $error = "Ошибка при обновлении порядка: " . $e->getMessage();
+        }
+        header("Location: test_edit.php?id=" . $test_id);
+        exit;
     }
 }
 ?>
@@ -134,6 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
     <title>Редактирование теста - <?php echo htmlspecialchars($test['title']); ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* Стили остаются без изменений */
         :root {
             --primary: #4a6bdf;
             --secondary: #6c757d;
@@ -475,7 +508,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                 </div>
                 
                 <div class="form-group">
-                    <label><i class="fas fa-list-alt"></i> Тип вопроса:</label>
+                    <label><i class="fas fa-list-alt"></i> Тип вопрос:</label>
                     <select name="question_type" id="question_type" onchange="toggleOptions()">
                         <option value="text">Текстовый ответ</option>
                         <option value="multiple_choice">Множественный выбор</option>
@@ -520,11 +553,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             <?php else: ?>
                 <form method="POST" id="order_form">
                     <ul id="sortable">
-                        <?php foreach ($questions as $question): ?>
+                        <?php foreach ($questions as $index => $question): ?>
                             <li class="question-item" data-id="<?php echo $question['id']; ?>">
                                 <div class="question-header">
                                     <span class="handle"><i class="fas fa-bars"></i></span>
-                                    <h3>Вопрос #<?php echo $question['sort_order']; ?></h3>
+                                    <h3>Вопрос #<?php echo ($index + 1); ?></h3>
                                     <span class="points"><?php echo $question['points']; ?> баллов</span>
                                     <span class="type">
                                         <?php echo $question['question_type'] == 'text' ? 'Текстовый' : 'Множественный выбор'; ?>
