@@ -50,6 +50,71 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute();
 $stats = $stmt->fetch();
+
+// Обработка AJAX запроса для получения данных студента
+if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['id'])) {
+    $studentId = intval($_GET['id']);
+    
+    $stmt = $pdo->prepare("
+        SELECT u.*, 
+               COUNT(tr.id) as test_attempts, 
+               COALESCE(SUM(tr.score), 0) as total_score,
+               COALESCE(SUM(tr.total_points), 0) as total_points,
+               MAX(tr.completed_at) as last_attempt
+        FROM users u
+        LEFT JOIN test_results tr ON u.id = tr.user_id
+        WHERE u.id = ? AND u.role = 'student'
+        GROUP BY u.id
+    ");
+    $stmt->execute([$studentId]);
+    $studentData = $stmt->fetch();
+    
+    if ($studentData) {
+        // Получаем последние результаты тестов
+        $stmt = $pdo->prepare("
+            SELECT tr.*, t.title as test_title 
+            FROM test_results tr
+            JOIN tests t ON tr.test_id = t.id
+            WHERE tr.user_id = ?
+            ORDER BY tr.completed_at DESC
+            LIMIT 5
+        ");
+        $stmt->execute([$studentId]);
+        $testResults = $stmt->fetchAll();
+        
+        // Формируем ответ
+        $performance = $studentData['total_points'] > 0 ? 
+            round(($studentData['total_score'] / $studentData['total_points']) * 100, 1) : 0;
+        
+        $response = [
+            'success' => true,
+            'student' => [
+                'id' => $studentData['id'],
+                'full_name' => $studentData['full_name'],
+                'email' => $studentData['email'],
+                'created_at' => date('d.m.Y', strtotime($studentData['created_at'])),
+                'last_activity' => $studentData['last_activity'] ? 
+                    date('d.m.Y H:i', strtotime($studentData['last_activity'])) : 'Нет данных',
+                'avatar' => !empty($studentData['avatar']) ? $studentData['avatar'] : 'default-avatar.png',
+                'test_attempts' => $studentData['test_attempts'],
+                'total_score' => $studentData['total_score'],
+                'total_points' => $studentData['total_points'],
+                'performance' => $performance,
+                'last_attempt' => $studentData['last_attempt'] ? 
+                    date('d.m.Y H:i', strtotime($studentData['last_attempt'])) : 'Нет попыток'
+            ],
+            'test_results' => $testResults
+        ];
+        
+        header('Content-Type: application/json');
+        echo json_encode($response);
+        exit;
+    } else {
+        header('Content-Type: application/json');
+        echo json_encode(['success' => false, 'message' => 'Студент не найден']);
+        exit;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -228,7 +293,7 @@ $stats = $stmt->fetch();
             align-items: center;
             background: white;
             padding: 10px 15px;
-                        border-radius: 30px;
+            border-radius: 30px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
         
@@ -461,6 +526,188 @@ $stats = $stmt->fetch();
             transition: width 0.5s ease-in-out;
         }
         
+        /* Модальное окно */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s;
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 0;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 700px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            border-bottom: 1px solid #eee;
+            background: var(--light);
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .modal-header h2 {
+            margin: 0;
+            color: var(--secondary);
+            font-size: 20px;
+        }
+        
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s;
+        }
+        
+        .close:hover {
+            color: var(--accent);
+        }
+        
+        .modal-body {
+            padding: 20px;
+        }
+        
+        .student-profile {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .profile-header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .profile-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            font-weight: bold;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .profile-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .profile-info h3 {
+            font-size: 24px;
+            margin-bottom: 5px;
+            color: var(--secondary);
+        }
+        
+        .profile-info p {
+            color: var(--gray);
+            margin-bottom: 5px;
+        }
+        
+        .profile-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-item {
+            background: var(--light);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            color: var(--gray);
+        }
+        
+        .test-results {
+            margin-top: 20px;
+        }
+        
+        .test-results h4 {
+            margin-bottom: 15px;
+            color: var(--secondary);
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        
+        .test-result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .test-result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .test-name {
+            font-weight: 500;
+        }
+        
+        .test-score {
+            color: var(--success);
+            font-weight: 600;
+        }
+        
+        .test-date {
+            color: var(--gray);
+            font-size: 12px;
+        }
+        
+        .no-results {
+            text-align: center;
+            color: var(--gray);
+            padding: 20px;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
         /* Responsive */
         @media (max-width: 992px) {
             .sidebar {
@@ -527,6 +774,26 @@ $stats = $stmt->fetch();
                 text-align: center;
                 margin-top: 10px;
             }
+            
+            .profile-header {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .profile-stats {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .profile-stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 10% auto;
+            }
         }
     </style>
 </head>
@@ -537,45 +804,45 @@ $stats = $stmt->fetch();
             <h1>Оценка знаний AI</h1>
         </div>
         
-         <div class="user-info">
-    <div class="user-avatar">
-        <?php 
-        $avatarPath = !empty($user['avatar']) ? $user['avatar'] : '1.jpg';
-        
-        // Проверяем, существует ли файл
-        if (file_exists($avatarPath)) {
-            echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
-        } else {
-            // Если файл не существует, показываем первую букву имени
-            $firstName = $user['full_name'];
-            // Преобразуем в UTF-8 на случай проблем с кодировкой
-            if (function_exists('mb_convert_encoding')) {
-                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
-            }
-            $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
-            echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
-        }
-        ?>
-    </div>
-    <div class="user-details">
-        <h3>Привет, <?php 
-            $nameParts = explode(' ', $user['full_name']);
-            $firstName = $nameParts[1];
-            if (function_exists('mb_convert_encoding')) {
-                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
-            }
-            echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
-        ?></h3>
-        <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
-        <span class="role-badge role-<?php echo $user['role']; ?>">
-            <?php 
-            if ($user['role'] == 'admin') echo 'Администратор';
-            else if ($user['role'] == 'teacher') echo 'Преподаватель';
-            else echo 'Студент';
-            ?>
-        </span>
-    </div>
-</div>
+        <div class="user-info">
+            <div class="user-avatar">
+                <?php 
+                $avatarPath = !empty($user['avatar']) ? $user['avatar'] : '1.jpg';
+                
+                // Проверяем, существует ли файл
+                if (file_exists($avatarPath)) {
+                    echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
+                } else {
+                    // Если файл не существует, показываем первую букву имени
+                    $firstName = $user['full_name'];
+                    // Преобразуем в UTF-8 на случай проблем с кодировкой
+                    if (function_exists('mb_convert_encoding')) {
+                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                    }
+                    $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+                    echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
+                }
+                ?>
+            </div>
+            <div class="user-details">
+                <h3>Привет, <?php 
+                    $nameParts = explode(' ', $user['full_name']);
+                    $firstName = $nameParts[1];
+                    if (function_exists('mb_convert_encoding')) {
+                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                    }
+                    echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
+                ?></h3>
+                <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
+                <span class="role-badge role-<?php echo $user['role']; ?>">
+                    <?php 
+                    if ($user['role'] == 'admin') echo 'Администратор';
+                    else if ($user['role'] == 'teacher') echo 'Преподаватель';
+                    else echo 'Студент';
+                    ?>
+                </span>
+            </div>
+        </div>
         
         <ul class="nav-links">
             <li><a href="dashboard.php"><i class="fas fa-th-large"></i> <span>Главная</span></a></li>
@@ -709,7 +976,7 @@ $stats = $stmt->fetch();
                                 </td>
                                 <td><?php echo date('d.m.Y', strtotime($student['created_at'])); ?></td>
                                 <td>
-                                    <a href="student_details.php?id=<?php echo $student['id']; ?>" class="btn btn-primary">Профиль</a>
+                                    <button class="btn btn-primary view-profile" data-id="<?php echo $student['id']; ?>">Профиль</button>
                                     <a href="student_results.php?id=<?php echo $student['id']; ?>" class="btn btn-success">Результаты</a>
                                 </td>
                             </tr>
@@ -719,6 +986,19 @@ $stats = $stmt->fetch();
             <?php else: ?>
                 <p>Нет зарегистрированных студентов.</p>
             <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Модальное окно профиля студента -->
+    <div id="studentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Профиль студента</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body" id="studentModalBody">
+                <!-- Содержимое будет загружено через AJAX -->
+            </div>
         </div>
     </div>
 
@@ -749,6 +1029,122 @@ $stats = $stmt->fetch();
                 }, 100);
             });
         });
+        
+        // Модальное окно профиля студента
+        const modal = document.getElementById('studentModal');
+        const closeBtn = document.querySelector('.close');
+        const modalBody = document.getElementById('studentModalBody');
+        
+        // Обработчики для кнопок "Профиль"
+        document.querySelectorAll('.view-profile').forEach(button => {
+            button.addEventListener('click', function() {
+                const studentId = this.getAttribute('data-id');
+                loadStudentProfile(studentId);
+            });
+        });
+        
+        // Закрытие модального окна
+        closeBtn.addEventListener('click', function() {
+            modal.style.display = 'none';
+        });
+        
+        window.addEventListener('click', function(event) {
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        });
+        
+        // Загрузка данных студента через AJAX
+        function loadStudentProfile(studentId) {
+            modalBody.innerHTML = '<div style="text-align: center; padding: 20px;"><i class="fas fa-spinner fa-spin"></i> Загрузка...</div>';
+            modal.style.display = 'block';
+            
+            fetch(`students.php?action=get_student&id=${studentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        renderStudentProfile(data);
+                    } else {
+                        modalBody.innerHTML = `<div class="no-results">${data.message || 'Ошибка загрузки данных'}</div>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                    modalBody.innerHTML = '<div class="no-results">Ошибка загрузки данных</div>';
+                });
+        }
+        
+        // Отрисовка профиля студента
+        function renderStudentProfile(data) {
+            const student = data.student;
+            const testResults = data.test_results || [];
+            
+            let testResultsHTML = '';
+            if (testResults.length > 0) {
+                testResults.forEach(result => {
+                    const percentage = result.total_points > 0 ? 
+                        Math.round((result.score / result.total_points) * 100) : 0;
+                    const passed = result.passed ? 'Пройден' : 'Не пройден';
+                    
+                    testResultsHTML += `
+                        <div class="test-result-item">
+                            <div>
+                                <div class="test-name">${result.test_title}</div>
+                                <div class="test-date">${new Date(result.completed_at).toLocaleDateString('ru-RU')}</div>
+                            </div>
+                            <div>
+                                <div class="test-score">${result.score}/${result.total_points} (${percentage}%)</div>
+                                <div>${passed}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+            } else {
+                testResultsHTML = '<div class="no-results">Нет результатов тестирования</div>';
+            }
+            
+            modalBody.innerHTML = `
+                <div class="student-profile">
+                    <div class="profile-header">
+                        <div class="profile-avatar">
+                            ${student.avatar && student.avatar !== 'default-avatar.png' ? 
+                                `<img src="${student.avatar}" alt="Аватар">` : 
+                                student.full_name.charAt(0).toUpperCase()}
+                        </div>
+                        <div class="profile-info">
+                            <h3>${student.full_name}</h3>
+                            <p>${student.email}</p>
+                            <p>Зарегистрирован: ${student.created_at}</p>
+                            <p>Последняя активность: ${student.last_activity}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="profile-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">${student.test_attempts}</div>
+                            <div class="stat-label">Попыток тестирования</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${student.total_score}/${student.total_points}</div>
+                            <div class="stat-label">Общий балл</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${student.performance}%</div>
+                            <div class="stat-label">Успеваемость</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${student.last_attempt}</div>
+                            <div class="stat-label">Последняя попытка</div>
+                        </div>
+                    </div>
+                    
+                    <div class="test-results">
+                        <h4>Последние результаты тестов</h4>
+                        ${testResultsHTML}
+                    </div>
+                </div>
+            `;
+        }
     </script>
 </body>
 </html>
