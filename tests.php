@@ -888,7 +888,7 @@ if ($user['role'] == 'student') {
                                             <a href="test_edit.php?id=<?php echo $test['id']; ?>" class="btn btn-primary" title="Редактировать">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <a href="test_results_view.php?id=<?php echo $test['id']; ?>" class="btn btn-success" title="Результаты">
+                                            <a href="test_results_view.php?test_id=<?php echo $test['id']; ?>" class="btn btn-success" title="Результаты">
                                                 <i class="fas fa-chart-bar"></i>
                                             </a>
                                            <a href="test_delete.php?id=<?php echo $test['id']; ?>" class="btn btn-danger" title="Удалить" 

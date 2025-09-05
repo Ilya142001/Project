@@ -44,7 +44,7 @@ try {
     }
 }
 
-// Получаем вопросы теста с сортировкой по sort_order, если столбец существует
+// Получаем вопросы теста с сортировкой по sort_order
 try {
     $stmt = $pdo->prepare("SELECT * FROM questions WHERE test_id = ? ORDER BY sort_order ASC, id ASC");
     $stmt->execute([$test_id]);
@@ -74,8 +74,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['add_question'])) {
             $max_order = $stmt->fetch()['max_order'] ?? 0;
             $sort_order = $max_order + 1;
             
-            $stmt = $pdo->prepare("INSERT INTO questions (test_id, question_text, question_type, points, sort_order) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$test_id, $question_text, $question_type, $points, $sort_order]);
+            // Используем NULL для created_by вместо 0
+            $stmt = $pdo->prepare("INSERT INTO questions (test_id, question_text, question_type, points, sort_order, created_by) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$test_id, $question_text, $question_type, $points, $sort_order, $_SESSION['user_id']]);
             
             $question_id = $pdo->lastInsertId();
             
@@ -165,16 +166,23 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Редактирование теста - <?php echo htmlspecialchars($test['title']); ?></title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Стили остаются без изменений */
         :root {
-            --primary: #4a6bdf;
-            --secondary: #6c757d;
-            --success: #28a745;
-            --danger: #dc3545;
-            --warning: #ffc107;
-            --light: #f8f9fa;
-            --dark: #343a40;
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --secondary: #64748b;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+            --light: #f8fafc;
+            --dark: #1e293b;
+            --border: #e2e8f0;
+            --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --radius: 12px;
+            --transition: all 0.2s ease-in-out;
         }
         
         * {
@@ -184,10 +192,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f5f7fb;
-            color: #333;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: var(--dark);
             line-height: 1.6;
+            min-height: 100vh;
         }
         
         .container {
@@ -196,268 +205,386 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             padding: 20px;
         }
         
-        header {
-            background: linear-gradient(135deg, var(--primary), #2c4fdb);
+        /* Header Styles */
+        .header {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
             color: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 30px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            padding: 2rem;
+            border-radius: var(--radius);
+            margin-bottom: 2rem;
+            box-shadow: var(--card-shadow);
+            backdrop-filter: blur(10px);
         }
         
-        header h1 {
-            font-size: 2.2em;
-            margin-bottom: 15px;
-        }
-        
-        nav {
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
             display: flex;
-            gap: 15px;
+            align-items: center;
+            gap: 1rem;
         }
         
-        nav a {
+        .nav {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
             color: white;
             text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            background: rgba(255,255,255,0.2);
-            transition: background 0.3s;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.15);
+            transition: var(--transition);
+            font-weight: 500;
         }
         
-        nav a:hover {
-            background: rgba(255,255,255,0.3);
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
         }
         
-        .error {
-            background-color: #ffebee;
+        /* Card Styles */
+        .card {
+            background: white;
+            border-radius: var(--radius);
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--card-shadow);
+            border: 1px solid var(--border);
+            transition: var(--transition);
+        }
+        
+        .card:hover {
+            box-shadow: var(--card-shadow-hover);
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--light);
+        }
+        
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        
+        /* Alert Styles */
+        .alert {
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 500;
+        }
+        
+        .alert-error {
+            background: #fef2f2;
             color: var(--danger);
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
             border-left: 4px solid var(--danger);
         }
         
-        .success {
-            background-color: #e8f5e9;
+        .alert-success {
+            background: #f0fdf4;
             color: var(--success);
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
             border-left: 4px solid var(--success);
         }
         
-        .card {
-            background: white;
-            border-radius: 10px;
-            padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            border: 1px solid #e0e0e0;
-        }
-        
-        .card h2 {
-            color: var(--primary);
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #f0f0f0;
-        }
-        
+        /* Form Styles */
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 1.5rem;
         }
         
-        .form-group label {
+        .form-label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 0.5rem;
             font-weight: 600;
             color: var(--dark);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         
-        input[type="text"],
-        input[type="number"],
-        textarea,
-        select {
+        .form-input,
+        .form-textarea,
+        .form-select {
             width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
+            padding: 1rem;
+            border: 2px solid var(--border);
             border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
+            font-size: 1rem;
+            transition: var(--transition);
+            font-family: inherit;
         }
         
-        input[type="text"]:focus,
-        input[type="number"]:focus,
-        textarea:focus,
-        select:focus {
+        .form-input:focus,
+        .form-textarea:focus,
+        .form-select:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(74, 107, 223, 0.1);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
         }
         
-        textarea {
-            min-height: 100px;
+        .form-textarea {
+            min-height: 120px;
             resize: vertical;
         }
         
+        /* Button Styles */
         .btn {
-            display: inline-block;
-            padding: 12px 24px;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+        
+        .btn-primary {
             background: var(--primary);
             color: white;
-            text-decoration: none;
-            border-radius: 8px;
-            border: none;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s;
         }
         
-        .btn:hover {
-            background: #3a5bd0;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(74, 107, 223, 0.3);
-        }
-        
-        .btn-danger {
-            background: var(--danger);
-        }
-        
-        .btn-danger:hover {
-            background: #c82333;
-            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+        .btn-primary:hover {
+            background: var(--primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
         }
         
         .btn-success {
             background: var(--success);
+            color: white;
         }
         
         .btn-success:hover {
-            background: #218838;
-            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+            background: #059669;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+        }
+        
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        
+        /* Options Styles */
+        .options-container {
+            background: var(--light);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin: 1.5rem 0;
         }
         
         .option-item {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-            padding: 10px;
-            background: #f8f9fa;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: white;
             border-radius: 8px;
+            border: 1px solid var(--border);
         }
         
         .option-item input[type="text"] {
             flex: 1;
+            margin: 0;
         }
         
-        .questions-list ul {
+        .correct-marker {
+            color: var(--success);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        
+        /* Questions List */
+        .questions-list {
+            margin-top: 2rem;
+        }
+        
+        .sortable-list {
             list-style: none;
         }
         
         .question-item {
             background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 15px;
-            border: 1px solid #e0e0e0;
-            transition: transform 0.2s;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border);
+            transition: var(--transition);
+            position: relative;
         }
         
         .question-item:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            box-shadow: var(--card-shadow-hover);
         }
         
         .question-header {
             display: flex;
             align-items: center;
-            gap: 15px;
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #f0f0f0;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--light);
         }
         
         .handle {
             cursor: move;
-            font-size: 18px;
             color: var(--secondary);
+            padding: 0.5rem;
+            border-radius: 6px;
+            background: var(--light);
+            transition: var(--transition);
         }
         
-        .points {
-            background: var(--primary);
-            color: white;
-            padding: 4px 12px;
+        .handle:hover {
+            background: var(--border);
+        }
+        
+        .question-number {
+            font-weight: 600;
+            color: var(--dark);
+        }
+        
+        .badge {
+            padding: 0.5rem 1rem;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 0.875rem;
             font-weight: 600;
         }
         
-        .type {
+        .badge-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .badge-secondary {
             background: var(--secondary);
             color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 14px;
         }
         
         .question-text {
-            font-size: 18px;
-            margin-bottom: 15px;
-            line-height: 1.5;
+            font-size: 1.125rem;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+            color: var(--dark);
+        }
+        
+        .options-list {
+            margin: 1rem 0;
         }
         
         .options-list ul {
             list-style: none;
-            margin-left: 20px;
+            margin-left: 1rem;
         }
         
         .options-list li {
-            padding: 8px 12px;
-            margin-bottom: 8px;
-            background: #f8f9fa;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            background: var(--light);
             border-radius: 6px;
-            border-left: 3px solid #6c757d;
+            border-left: 3px solid var(--secondary);
+            transition: var(--transition);
         }
         
         .options-list li.correct {
-            background: #e8f5e9;
+            background: #f0fdf4;
             border-left-color: var(--success);
         }
         
-        .correct-marker {
-            color: var(--success);
-            font-weight: bold;
-            margin-left: 10px;
+        .options-list li:hover {
+            transform: translateX(4px);
         }
         
         .question-actions {
             display: flex;
-            gap: 10px;
-            margin-top: 15px;
-            padding-top: 15px;
-            border-top: 1px solid #f0f0f0;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--light);
         }
         
+        /* Test Info */
         .test-info {
             display: grid;
             grid-template-columns: 1fr auto;
-            gap: 20px;
-            align-items: center;
+            gap: 2rem;
+            align-items: start;
         }
         
+        .test-details p {
+            margin-bottom: 0.5rem;
+            color: var(--secondary);
+        }
+        
+        .test-details strong {
+            color: var(--dark);
+        }
+        
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--secondary);
+        }
+        
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: var(--border);
+        }
+        
+        /* Responsive Design */
         @media (max-width: 768px) {
             .container {
-                padding: 10px;
+                padding: 1rem;
             }
             
-            header {
-                padding: 15px;
+            .header {
+                padding: 1.5rem;
             }
             
-            nav {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .nav {
                 flex-direction: column;
-                gap: 10px;
             }
             
             .test-info {
@@ -471,95 +598,187 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             .question-actions {
                 flex-direction: column;
             }
+            
+            .option-item {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .card {
+                padding: 1.5rem;
+            }
+        }
+        
+        /* Animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .question-item {
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        /* Drag and Drop Styles */
+        .sortable-helper {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            transform: rotate(2deg);
+        }
+        
+        .sortable-placeholder {
+            background: var(--light);
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            height: 100px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header>
-            <h1><i class="fas fa-edit"></i> Редактирование теста: <?php echo htmlspecialchars($test['title']); ?></h1>
-            <nav>
-                <a href="tests.php"><i class="fas fa-arrow-left"></i> Мои тесты</a>
-                <a href="logout.php"><i class="fas fa-sign-out-alt"></i> Выйти</a>
+        <header class="header">
+            <h1>
+                <i class="fas fa-edit"></i>
+                Редактирование теста: <?php echo htmlspecialchars($test['title']); ?>
+            </h1>
+            <nav class="nav">
+                <a href="tests.php" class="nav-link">
+                    <i class="fas fa-arrow-left"></i>
+                    Мои тесты
+                </a>
+                <a href="logout.php" class="nav-link">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Выйти
+                </a>
             </nav>
         </header>
 
         <?php if (isset($error)): ?>
-            <div class="error"><i class="fas fa-exclamation-circle"></i> <?php echo $error; ?></div>
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-circle"></i>
+                <?php echo $error; ?>
+            </div>
         <?php endif; ?>
 
-        <div class="card test-info">
-            <div>
-                <h2><i class="fas fa-info-circle"></i> Информация о тесте</h2>
-                <p><strong>Описание:</strong> <?php echo htmlspecialchars($test['description']); ?></p>
-                <p><strong>Время на выполнение:</strong> <?php echo $test['time_limit']; ?> минут</p>
+        <div class="card">
+            <div class="test-info">
+                <div class="test-details">
+                    <h2 class="card-title">
+                        <i class="fas fa-info-circle"></i>
+                        Информация о тесте
+                    </h2>
+                    <p><strong>Описание:</strong> <?php echo htmlspecialchars($test['description']); ?></p>
+                    <p><strong>Время на выполнение:</strong> <?php echo $test['time_limit']; ?> минут</p>
+                    <p><strong>Статус:</strong> 
+                        <?php echo $test['is_active'] ? 'Активный' : 'Неактивный'; ?> | 
+                        <?php echo $test['is_published'] ? 'Опубликован' : 'Черновик'; ?>
+                    </p>
+                </div>
+                <a href="test_settings.php?id=<?php echo $test_id; ?>" class="btn btn-primary">
+                    <i class="fas fa-cog"></i>
+                    Настройки теста
+                </a>
             </div>
-            <a href="test_settings.php?id=<?php echo $test_id; ?>" class="btn">
-                <i class="fas fa-cog"></i> Настройки теста
-            </a>
         </div>
 
-        <div class="card add-question">
-            <h2><i class="fas fa-plus-circle"></i> Добавить вопрос</h2>
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-plus-circle"></i>
+                    Добавить вопрос
+                </h2>
+            </div>
             <form method="POST">
                 <div class="form-group">
-                    <label><i class="fas fa-question-circle"></i> Текст вопроса:</label>
-                    <textarea name="question_text" required placeholder="Введите текст вопроса..."></textarea>
+                    <label class="form-label">
+                        <i class="fas fa-question-circle"></i>
+                        Текст вопроса:
+                    </label>
+                    <textarea name="question_text" class="form-textarea" required placeholder="Введите текст вопроса..."></textarea>
                 </div>
                 
                 <div class="form-group">
-                    <label><i class="fas fa-list-alt"></i> Тип вопрос:</label>
-                    <select name="question_type" id="question_type" onchange="toggleOptions()">
+                    <label class="form-label">
+                        <i class="fas fa-list-alt"></i>
+                        Тип вопроса:
+                    </label>
+                    <select name="question_type" id="question_type" class="form-select" onchange="toggleOptions()">
                         <option value="text">Текстовый ответ</option>
                         <option value="multiple_choice">Множественный выбор</option>
                     </select>
                 </div>
                 
                 <div class="form-group">
-                    <label><i class="fas fa-star"></i> Баллы:</label>
-                    <input type="number" name="points" value="1" min="1" required>
+                    <label class="form-label">
+                        <i class="fas fa-star"></i>
+                        Баллы:
+                    </label>
+                    <input type="number" name="points" class="form-input" value="1" min="1" required>
                 </div>
                 
-                <div id="options_container" style="display: none;">
-                    <h3><i class="fas fa-list-ol"></i> Варианты ответов</h3>
+                <div id="options_container" class="options-container" style="display: none;">
+                    <h3 style="margin-bottom: 1rem; color: var(--dark);">
+                        <i class="fas fa-list-ol"></i>
+                        Варианты ответов
+                    </h3>
                     <div id="options_list">
                         <div class="option-item">
-                            <input type="text" name="options[]" placeholder="Вариант ответа 1" required>
+                            <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 1">
                             <input type="radio" name="correct_option" value="0" checked> 
                             <span class="correct-marker">Правильный</span>
                         </div>
                         <div class="option-item">
-                            <input type="text" name="options[]" placeholder="Вариант ответа 2" required>
+                            <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 2">
                             <input type="radio" name="correct_option" value="1"> 
                             <span class="correct-marker">Правильный</span>
                         </div>
                     </div>
-                    <button type="button" class="btn" onclick="addOption()">
-                        <i class="fas fa-plus"></i> Добавить вариант
+                    <button type="button" class="btn btn-primary" onclick="addOption()">
+                        <i class="fas fa-plus"></i>
+                        Добавить вариант
                     </button>
                 </div>
                 
                 <button type="submit" name="add_question" class="btn btn-success">
-                    <i class="fas fa-save"></i> Добавить вопрос
+                    <i class="fas fa-save"></i>
+                    Добавить вопрос
                 </button>
             </form>
         </div>
 
-        <div class="card questions-list">
-            <h2><i class="fas fa-list"></i> Вопросы теста (<?php echo count($questions); ?>)</h2>
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <i class="fas fa-list"></i>
+                    Вопросы теста
+                    <span class="badge badge-primary"><?php echo count($questions); ?></span>
+                </h2>
+            </div>
             
             <?php if (empty($questions)): ?>
-                <p class="text-center">Вопросы пока не добавлены.</p>
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <h3>Вопросы пока не добавлены</h3>
+                    <p>Добавьте первый вопрос, используя форму выше</p>
+                </div>
             <?php else: ?>
                 <form method="POST" id="order_form">
-                    <ul id="sortable">
+                    <ul id="sortable" class="sortable-list">
                         <?php foreach ($questions as $index => $question): ?>
                             <li class="question-item" data-id="<?php echo $question['id']; ?>">
                                 <div class="question-header">
-                                    <span class="handle"><i class="fas fa-bars"></i></span>
-                                    <h3>Вопрос #<?php echo ($index + 1); ?></h3>
-                                    <span class="points"><?php echo $question['points']; ?> баллов</span>
-                                    <span class="type">
+                                    <span class="handle">
+                                        <i class="fas fa-bars"></i>
+                                    </span>
+                                    <span class="question-number">Вопрос #<?php echo ($index + 1); ?></span>
+                                    <span class="badge badge-primary"><?php echo $question['points']; ?> баллов</span>
+                                    <span class="badge badge-secondary">
                                         <?php echo $question['question_type'] == 'text' ? 'Текстовый' : 'Множественный выбор'; ?>
                                     </span>
                                 </div>
@@ -574,29 +793,39 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                                     $stmt->execute([$question['id']]);
                                     $options = $stmt->fetchAll();
                                     ?>
-                                    <div class="options-list">
-                                        <h4>Варианты ответов:</h4>
-                                        <ul>
-                                            <?php foreach ($options as $option): ?>
-                                                <li class="<?php echo $option['is_correct'] ? 'correct' : ''; ?>">
-                                                    <?php echo htmlspecialchars($option['option_text']); ?>
-                                                    <?php if ($option['is_correct']): ?>
-                                                        <span class="correct-marker"><i class="fas fa-check"></i> Правильный</span>
-                                                    <?php endif; ?>
-                                                </li>
-                                            <?php endforeach; ?>
-                                        </ul>
-                                    </div>
+                                    <?php if (!empty($options)): ?>
+                                        <div class="options-list">
+                                            <h4 style="margin-bottom: 0.75rem; color: var(--dark);">
+                                                <i class="fas fa-list-check"></i>
+                                                Варианты ответов:
+                                            </h4>
+                                            <ul>
+                                                <?php foreach ($options as $option): ?>
+                                                    <li class="<?php echo $option['is_correct'] ? 'correct' : ''; ?>">
+                                                        <?php echo htmlspecialchars($option['option_text']); ?>
+                                                        <?php if ($option['is_correct']): ?>
+                                                            <span class="correct-marker">
+                                                                <i class="fas fa-check"></i>
+                                                                Правильный
+                                                            </span>
+                                                        <?php endif; ?>
+                                                    </li>
+                                                <?php endforeach; ?>
+                                            </ul>
+                                        </div>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                                 
                                 <div class="question-actions">
-                                    <a href="question_edit.php?id=<?php echo $question['id']; ?>" class="btn">
-                                        <i class="fas fa-edit"></i> Редактировать
+                                    <a href="question_edit.php?id=<?php echo $question['id']; ?>" class="btn btn-primary btn-sm">
+                                        <i class="fas fa-edit"></i>
+                                        Редактировать
                                     </a>
                                     <a href="test_edit.php?id=<?php echo $test_id; ?>&delete_question=<?php echo $question['id']; ?>" 
-                                       class="btn btn-danger" 
+                                       class="btn btn-danger btn-sm" 
                                        onclick="return confirm('Удалить этот вопрос?')">
-                                        <i class="fas fa-trash"></i> Удалить
+                                        <i class="fas fa-trash"></i>
+                                        Удалить
                                     </a>
                                 </div>
                                 
@@ -606,7 +835,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                     </ul>
                     
                     <button type="submit" name="update_order" class="btn btn-success">
-                        <i class="fas fa-save"></i> Сохранить порядок
+                        <i class="fas fa-save"></i>
+                        Сохранить порядок
                     </button>
                 </form>
             <?php endif; ?>
@@ -620,12 +850,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         const type = document.getElementById('question_type').value;
         const container = document.getElementById('options_container');
         container.style.display = type === 'multiple_choice' ? 'block' : 'none';
-        
-        // Делаем поля обязательными только для множественного выбора
-        const optionInputs = document.querySelectorAll('input[name="options[]"]');
-        optionInputs.forEach(input => {
-            input.required = type === 'multiple_choice';
-        });
     }
     
     function addOption() {
@@ -635,12 +859,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         const div = document.createElement('div');
         div.className = 'option-item';
         div.innerHTML = `
-            <input type="text" name="options[]" placeholder="Вариант ответа ${optionCount + 1}" required>
-            <input type="radio" name="correct_option" value="${optionCount}"> 
-            <span class="correct-marker">Правильный</span>
-            <button type="button" class="btn btn-danger" onclick="removeOption(this)" style="padding: 5px 10px; margin-left: 10px;">
-                <i class="fas fa-times"></i>
-            </button>
+            <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа ${optionCount + 1}">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <input type="radio" name="correct_option" value="${optionCount}"> 
+                <span class="correct-marker">Правильный</span>
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeOption(this)">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
         `;
         
         optionsList.appendChild(div);
@@ -661,9 +887,16 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
     $(function() {
         $("#sortable").sortable({
             handle: ".handle",
+            placeholder: "sortable-placeholder",
+            helper: function(e, ui) {
+                ui.children().each(function() {
+                    $(this).width($(this).width());
+                });
+                return ui;
+            },
             update: function() {
                 $('#sortable li').each(function(index) {
-                    $(this).find('h3').text('Вопрос #' + (index + 1));
+                    $(this).find('.question-number').text('Вопрос #' + (index + 1));
                 });
             }
         });
@@ -673,6 +906,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
     // Инициализация при загрузке
     document.addEventListener('DOMContentLoaded', function() {
         toggleOptions();
+        
+        // Добавляем анимацию для карточек
+        document.querySelectorAll('.question-item').forEach((item, index) => {
+            item.style.animationDelay = `${index * 0.1}s`;
+        });
     });
     </script>
 </body>

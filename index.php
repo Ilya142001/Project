@@ -13,52 +13,60 @@ if (isset($_SESSION['user_id'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Система интеллектуальной оценки знаний</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Montserrat', sans-serif;
         }
         
         body {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
         
         .container {
             width: 100%;
             max-width: 450px;
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.1);
             overflow: hidden;
+            position: relative;
         }
         
         .header {
-            padding: 35px 30px 25px;
+            padding: 30px 30px 20px;
             text-align: center;
+            background: white;
+            color: #2c3e50;
+            position: relative;
+            border-bottom: 1px solid #eee;
         }
         
         .title {
-            color: #2d3748;
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 10px;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #2c3e50;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .subtitle {
-            color: #718096;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 400;
+            color: #7f8c8d;
         }
         
         .form-container {
-            padding: 0 30px 30px;
+            padding: 30px;
         }
         
         .form-group {
@@ -66,26 +74,34 @@ if (isset($_SESSION['user_id'])) {
             position: relative;
         }
         
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #2c3e50;
+        }
+        
         .form-group input {
             width: 100%;
-            padding: 16px 20px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s, box-shadow 0.3s;
-            color: #2d3748;
-            background: #f7fafc;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            color: #2c3e50;
+            background: #f9f9f9;
         }
         
         .form-group input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+            border-color: #3498db;
             outline: none;
             background: white;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
         }
         
         .form-group input::placeholder {
-            color: #a0aec0;
+            color: #95a5a6;
         }
         
         .forgot-password {
@@ -94,35 +110,37 @@ if (isset($_SESSION['user_id'])) {
         }
         
         .forgot-password a {
-            color: #667eea;
+            color: #3498db;
             text-decoration: none;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 500;
-            transition: color 0.3s;
+            transition: all 0.3s ease;
         }
         
         .forgot-password a:hover {
-            color: #5a67d8;
+            color: #2980b9;
             text-decoration: underline;
         }
         
         .btn {
             width: 100%;
-            padding: 16px;
-            background: #667eea;
+            padding: 15px;
+            background: #3498db;
             color: white;
             border: none;
-            border-radius: 8px;
+            border-radius: 5px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.3s, transform 0.2s;
-            letter-spacing: 0.5px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
         
         .btn:hover {
-            background: #5a67d8;
+            background: #2980b9;
             transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.3);
         }
         
         .btn:active {
@@ -132,98 +150,84 @@ if (isset($_SESSION['user_id'])) {
         .form-footer {
             text-align: center;
             margin-top: 25px;
-            color: #718096;
-            font-size: 15px;
+            color: #7f8c8d;
+            font-size: 14px;
+            padding: 15px;
+            border-top: 1px solid #eee;
         }
         
         .form-footer a {
-            color: #667eea;
+            color: #3498db;
             text-decoration: none;
             font-weight: 600;
-            transition: color 0.3s;
+            transition: all 0.3s ease;
         }
         
         .form-footer a:hover {
-            color: #5a67d8;
+            color: #2980b9;
             text-decoration: underline;
         }
         
-        .divider {
-            display: flex;
-            align-items: center;
-            margin: 25px 0;
-        }
-        
-        .divider::before, .divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: #e2e8f0;
-        }
-        
-        .divider span {
-            padding: 0 15px;
-            color: #a0aec0;
-            font-size: 14px;
-        }
-        
-        .social-login {
-            display: flex;
-            justify-content: center;
-            gap: 15px;
-            margin-top: 20px;
-        }
-        
-        .social-btn {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: #f7fafc;
-            border: 1px solid #e2e8f0;
-            cursor: pointer;
-            transition: background 0.3s, transform 0.2s;
-        }
-        
-        .social-btn:hover {
-            background: #edf2f7;
-            transform: translateY(-2px);
-        }
-        
-        .social-btn i {
-            color: #718096;
-            font-size: 20px;
-        }
-        
         .error-message {
-            color: #e53e3e;
-            background: #fed7d7;
-            padding: 10px;
+            color: #e74c3c;
+            background: #fadbd8;
+            padding: 12px;
             border-radius: 5px;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             display: none;
+            font-size: 14px;
+            animation: shake 0.5s ease;
         }
         
         .success-message {
-            color: #38a169;
-            background: #c6f6d5;
-            padding: 10px;
+            color: #27ae60;
+            background: #d5f4e6;
+            padding: 12px;
             border-radius: 5px;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             display: none;
+            font-size: 14px;
+            animation: fadeIn 0.5s ease;
         }
         
         .form-toggle {
             text-align: center;
             margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+            border: 1px solid #eee;
+        }
+        
+        .form-toggle span {
+            color: #7f8c8d;
+            margin-right: 8px;
+            font-size: 14px;
         }
         
         .form-toggle a {
-            color: #667eea;
+            color: #3498db;
             cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: inline-block;
+            font-size: 14px;
+        }
+        
+        .form-toggle a:hover {
+            color: #2980b9;
             text-decoration: underline;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         
         #registerForm {
@@ -239,8 +243,12 @@ if (isset($_SESSION['user_id'])) {
                 padding: 25px 20px 15px;
             }
             
+            .title {
+                font-size: 20px;
+            }
+            
             .form-container {
-                padding: 0 20px 20px;
+                padding: 25px 20px;
             }
         }
     </style>
@@ -248,8 +256,8 @@ if (isset($_SESSION['user_id'])) {
 <body>
     <div class="container">
         <div class="header">
-            <h1 class="title" id="formTitle">Добро пожаловать</h1>
-            <p class="subtitle" id="formSubtitle">Войдите в систему для продолжения</p>
+            <h1 class="title" id="formTitle">MEMBER LOGIN</h1>
+            <p class="subtitle" id="formSubtitle">Enter your credentials to access your account</p>
         </div>
         
         <div class="form-container">
@@ -258,54 +266,56 @@ if (isset($_SESSION['user_id'])) {
             
             <form id="loginForm">
                 <div class="form-group">
-                    <input type="email" name="email" placeholder="email@example.com" required>
+                    <label for="email">Username</label>
+                    <input type="text" id="email" name="email" placeholder="Enter your username" required>
                 </div>
                 
                 <div class="form-group">
-                    <input type="password" name="password" placeholder="Введите пароль" required>
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Enter your password" required>
                 </div>
                 
                 <div class="forgot-password">
-                    <a href="#">Забыли пароль?</a>
+                    <a href="#">Forget Password? Click Here</a>
                 </div>
                 
-                <button type="submit" class="btn">Войти</button>
+                <button type="submit" class="btn">LOGIN</button>
             </form>
             
             <form id="registerForm">
                 <div class="form-group">
-                    <input type="text" name="full_name" placeholder="Ваше полное имя" required>
+                    <label for="full_name">Full Name</label>
+                    <input type="text" id="full_name" name="full_name" placeholder="Your full name" required>
                 </div>
                 
                 <div class="form-group">
-                    <input type="email" name="email" placeholder="email@example.com" required>
+                    <label for="reg_email">Email</label>
+                    <input type="email" id="reg_email" name="email" placeholder="email@example.com" required>
                 </div>
                 
                 <div class="form-group">
-                    <input type="password" name="password" placeholder="Создайте пароль" required>
+                    <label for="reg_password">Password</label>
+                    <input type="password" id="reg_password" name="password" placeholder="Create a password" required>
                 </div>
                 
                 <div class="form-group">
-                    <input type="password" name="confirm_password" placeholder="Подтвердите пароль" required>
+                    <label for="confirm_password">Confirm Password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm your password" required>
                 </div>
                 
-                <button type="submit" class="btn">Зарегистрироваться</button>
+                <button type="submit" class="btn">REGISTER</button>
             </form>
             
             <div class="form-toggle">
-                <span id="toggleText">Нет аккаунта?</span>
-                <a id="toggleLink">Зарегистрироваться!</a>
-            </div>
-            
-            <div class="divider">
-                <span>или</span>
+                <span id="toggleText">Don't have an account?</span>
+                <a id="toggleLink">REGISTER</a>
             </div>
             
             <div class="form-footer">
-                <p>Тестовые аккаунты:</p>
-                <p>Админ: admin@system.com / admin123</p>
-                <p>Преподаватель: teacher@system.com / teacher123</p>
-                <p>Студент: student@system.com / student123</p>
+                <p>Test accounts:</p>
+                <p>Admin: admin@system.com / admin123</p>
+                <p>Teacher: teacher@system.com / teacher123</p>
+                <p>Student: student@system.com / student123</p>
             </div>
         </div>
     </div>
@@ -326,18 +336,18 @@ if (isset($_SESSION['user_id'])) {
                 // Переключаемся на форму входа
                 loginForm.style.display = 'block';
                 registerForm.style.display = 'none';
-                formTitle.textContent = 'Добро пожаловать';
-                formSubtitle.textContent = 'Войдите в систему для продолжения';
-                toggleText.textContent = "Нет аккаунта?";
-                toggleLink.textContent = 'Зарегистрироваться!';
+                formTitle.textContent = 'MEMBER LOGIN';
+                formSubtitle.textContent = 'Enter your credentials to access your account';
+                toggleText.textContent = "Don't have an account?";
+                toggleLink.textContent = 'REGISTER';
             } else {
                 // Переключаемся на форму регистрации
                 loginForm.style.display = 'none';
                 registerForm.style.display = 'block';
-                formTitle.textContent = 'Создание аккаунта';
-                formSubtitle.textContent = 'Зарегистрируйтесь для начала работы';
-                toggleText.textContent = 'Уже есть аккаунт?';
-                toggleLink.textContent = 'Войти!';
+                formTitle.textContent = 'CREATE ACCOUNT';
+                formSubtitle.textContent = 'Register for a new account';
+                toggleText.textContent = 'Already have an account?';
+                toggleLink.textContent = 'LOGIN';
             }
         });
         
@@ -372,7 +382,7 @@ if (isset($_SESSION['user_id'])) {
                 })
                 .catch(error => {
                     console.error('Error:', error);
-                    errorMessage.textContent = 'Произошла ошибка. Пожалуйста, попробуйте снова.';
+                    errorMessage.textContent = 'An error occurred. Please try again.';
                     errorMessage.style.display = 'block';
                 });
             });
