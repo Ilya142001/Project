@@ -650,9 +650,11 @@ echo "<p>Добро пожаловать. $second_word $third_word</p>";
             </div>
             
             <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="text" placeholder="Поиск...">
-            </div>
+    <form method="GET" action="search.php">
+        <i class="fas fa-search"></i>
+        <input type="text" name="q" placeholder="Поиск..." value="<?php echo isset($_GET['q']) ? htmlspecialchars($_GET['q']) : ''; ?>">
+    </form>
+</div>
         </div>
         
         <div class="stats-cards">
@@ -683,6 +685,9 @@ echo "<p>Добро пожаловать. $second_word $third_word</p>";
                     </div>
                     <div class="stat-details">
                         <h3><?php echo $stats['total_points'] > 0 ? round(($stats['total_score'] / $stats['total_points']) * 100, 1) : 0; ?>%</h3>
+                        <div style="background: #ecf0f1; height: 5px; border-radius: 3px; margin-top: 5px;">
+    <div style="height: 100%; border-radius: 3px; background: var(--success); width: <?php echo $stats['total_points'] > 0 ? round(($stats['total_score'] / $stats['total_points']) * 100, 1) : 0; ?>%;"></div>
+</div>
                         <p>Средний результат</p>
                     </div>
                 </div>
@@ -752,8 +757,11 @@ echo "<p>Добро пожаловать. $second_word $third_word</p>";
                             </div>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <p>Нет доступных тестов для прохождения.</p>
-                    <?php endif; ?>
+    <div style="text-align: center; padding: 30px; color: var(--gray);">
+        <i class="fas fa-inbox" style="font-size: 50px; margin-bottom: 15px; opacity: 0.5;"></i>
+        <p>Пока нет доступных тестов. Обратитесь к преподавателю.</p>
+    </div>
+<?php endif; ?>
                 </div>
             </div>
             
@@ -769,7 +777,7 @@ echo "<p>Добро пожаловать. $second_word $third_word</p>";
                             <div class="test-item">
                                 <div class="test-title"><?php echo $test['title']; ?></div>
                                 <div class="test-meta">
-                                    <span>Дата: <?php echo date('d.m.Y', strtotime($test['completed_at'])); ?></span>
+                                    <span>Дата: <?php echo date('j M Y, H:i', strtotime($test['completed_at'])); ?></span>
                                     <span class="test-score"><?php echo $test['score']; ?>/<?php echo $test['total_points']; ?></span>
                                 </div>
                                 <div class="test-actions">

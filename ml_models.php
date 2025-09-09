@@ -26,6 +26,137 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute();
 $stats = $stmt->fetch();
+
+// Получаем статистику по предсказаниям
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) as total_predictions,
+           AVG(confidence) as avg_confidence
+    FROM model_predictions
+");
+$stmt->execute();
+$prediction_stats = $stmt->fetch();
+
+// Получаем последние предсказания
+$stmt = $pdo->prepare("
+    SELECT mp.*, m.name as model_name, u.full_name as student_name, t.title as test_title
+    FROM model_predictions mp
+    JOIN ml_models m ON mp.model_id = m.id
+    JOIN test_results tr ON mp.test_result_id = tr.id
+    JOIN users u ON tr.user_id = u.id
+    JOIN tests t ON tr.test_id = t.id
+    ORDER BY mp.created_at DESC
+    LIMIT 5
+");
+$stmt->execute();
+$recent_predictions = $stmt->fetchAll();
+
+// Обработка добавления новой модели
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_model']) && $user['role'] == 'admin') {
+    $name = $_POST['name'];
+    $description = $_POST['description'];
+    $accuracy = $_POST['accuracy'];
+    $path = $_POST['path'];
+    $is_active = isset($_POST['is_active']) ? 1 : 0;
+    
+    $stmt = $pdo->prepare("INSERT INTO ml_models (name, description, accuracy, path, is_active) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$name, $description, $accuracy, $path, $is_active]);
+    
+    // Логируем действие
+    $stmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)");
+    $stmt->execute([$user['id'], 'MODEL_ADDED', "Добавлена модель: $name"]);
+    
+    header("Location: ml_models.php?success=1");
+    exit;
+}
+
+// Обработка активации/деактивации модели
+if (isset($_GET['toggle']) && $user['role'] == 'admin') {
+    $model_id = $_GET['id'];
+    $stmt = $pdo->prepare("SELECT is_active FROM ml_models WHERE id = ?");
+    $stmt->execute([$model_id]);
+    $model = $stmt->fetch();
+    
+    $new_status = $model['is_active'] ? 0 : 1;
+    $stmt = $pdo->prepare("UPDATE ml_models SET is_active = ? WHERE id = ?");
+    $stmt->execute([$new_status, $model_id]);
+    
+    // Логируем действие
+    $action = $new_status ? 'MODEL_ACTIVATED' : 'MODEL_DEACTIVATED';
+    $stmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)");
+    $stmt->execute([$user['id'], $action, "Модель ID: $model_id"]);
+    
+    header("Location: ml_models.php");
+    exit;
+}
+
+// Обработка удаления модели
+if (isset($_GET['delete']) && $user['role'] == 'admin') {
+    $model_id = $_GET['id'];
+    
+    $stmt = $pdo->prepare("DELETE FROM ml_models WHERE id = ?");
+    $stmt->execute([$model_id]);
+    
+    // Логируем действие
+    $stmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)");
+    $stmt->execute([$user['id'], 'MODEL_DELETED', "Удалена модель ID: $model_id"]);
+    
+    header("Location: ml_models.php?deleted=1");
+    exit;
+}
+
+// Обработка запуска предсказания
+if (isset($_GET['predict']) && $user['role'] == 'admin') {
+    $model_id = $_GET['id'];
+    
+    // Получаем активную модель
+    $stmt = $pdo->prepare("SELECT * FROM ml_models WHERE id = ? AND is_active = 1");
+    $stmt->execute([$model_id]);
+    $model = $stmt->fetch();
+    
+    if ($model) {
+        // Имитация работы ML модели - анализ последних результатов тестов
+        $stmt = $pdo->prepare("
+            SELECT tr.*, u.full_name, t.title 
+            FROM test_results tr 
+            JOIN users u ON tr.user_id = u.id 
+            JOIN tests t ON tr.test_id = t.id 
+            WHERE tr.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            ORDER BY tr.completed_at DESC 
+            LIMIT 10
+        ");
+        $stmt->execute();
+        $recent_results = $stmt->fetchAll();
+        
+        foreach ($recent_results as $result) {
+            // Генерируем предсказание (в реальной системе здесь будет вызов ML модели)
+            $confidence = rand(70, 95) / 100; // Имитация уверенности модели
+            $prediction_data = [
+                'predicted_score' => min($result['total_points'], round($result['score'] * 1.1)),
+                'factors' => ['time_spent', 'accuracy', 'consistency'],
+                'risk_level' => $confidence > 0.8 ? 'low' : ($confidence > 0.6 ? 'medium' : 'high')
+            ];
+            
+            // Сохраняем предсказание в базу
+            $stmt = $pdo->prepare("
+                INSERT INTO model_predictions (model_id, test_result_id, prediction_data, confidence) 
+                VALUES (?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $model_id, 
+                $result['id'], 
+                json_encode($prediction_data, JSON_UNESCAPED_UNICODE), 
+                $confidence
+            ]);
+        }
+        
+        // Логируем действие
+        $stmt = $pdo->prepare("INSERT INTO activity_logs (user_id, action, description) VALUES (?, ?, ?)");
+        $stmt->execute([$user['id'], 'MODEL_PREDICTION', "Запущено предсказание для модели: " . $model['name']]);
+        
+        header("Location: ml_models.php?prediction=1");
+        exit;
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -36,7 +167,7 @@ $stats = $stmt->fetch();
     <title>ML модели - Система интеллектуальной оценки знаний</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Стили из dashboard.php */
+        /* Стили из предыдущей версии */
         * {
             margin: 0;
             padding: 0;
@@ -393,6 +524,7 @@ $stats = $stmt->fetch();
         .model-actions {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
         
         .btn {
@@ -434,6 +566,15 @@ $stats = $stmt->fetch();
             opacity: 0.9;
         }
         
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            opacity: 0.9;
+        }
+        
         /* Table */
         .data-table {
             width: 100%;
@@ -454,6 +595,174 @@ $stats = $stmt->fetch();
         
         .data-table tr:hover {
             background-color: #f9f9f9;
+        }
+        
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--secondary);
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 15px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-control:focus {
+            border-color: var(--primary);
+            outline: none;
+        }
+        
+        textarea.form-control {
+            min-height: 100px;
+            resize: vertical;
+        }
+        
+        .form-check {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .form-check-input {
+            width: 18px;
+            height: 18px;
+        }
+        
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 600px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .modal-header h2 {
+            font-size: 20px;
+            color: var(--secondary);
+        }
+        
+        .close {
+            color: var(--gray);
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: var(--accent);
+        }
+        
+        /* Alert Messages */
+        .alert {
+            padding: 12px 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .alert-success {
+            background-color: rgba(46, 204, 113, 0.2);
+            color: var(--success);
+            border-left: 4px solid var(--success);
+        }
+        
+        .alert-danger {
+            background-color: rgba(231, 76, 60, 0.2);
+            color: var(--accent);
+            border-left: 4px solid var(--accent);
+        }
+        
+        .alert-info {
+            background-color: rgba(52, 152, 219, 0.2);
+            color: var(--primary);
+            border-left: 4px solid var(--primary);
+        }
+        
+        /* Prediction Cards */
+        .prediction-card {
+            background: var(--light);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .prediction-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .prediction-title {
+            font-weight: 600;
+            color: var(--secondary);
+        }
+        
+        .prediction-confidence {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+            background: rgba(46, 204, 113, 0.2);
+            color: var(--success);
+        }
+        
+        .prediction-details {
+            color: var(--gray);
+            font-size: 14px;
+        }
+        
+        /* Progress Bar */
+        .progress-bar {
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 4px;
         }
         
         /* Responsive */
@@ -514,6 +823,11 @@ $stats = $stmt->fetch();
             
             .model-actions {
                 flex-direction: column;
+            }
+            
+            .modal-content {
+                width: 95%;
+                margin: 10% auto;
             }
         }
     </style>
@@ -592,6 +906,25 @@ $stats = $stmt->fetch();
             </div>
         </div>
         
+        <!-- Уведомления -->
+        <?php if (isset($_GET['success'])): ?>
+        <div class="alert alert-success">
+            <i class="fas fa-check-circle"></i> Модель успешно добавлена!
+        </div>
+        <?php endif; ?>
+        
+        <?php if (isset($_GET['deleted'])): ?>
+        <div class="alert alert-danger">
+            <i class="fas fa-check-circle"></i> Модель успешно удалена!
+        </div>
+        <?php endif; ?>
+        
+        <?php if (isset($_GET['prediction'])): ?>
+        <div class="alert alert-info">
+            <i class="fas fa-check-circle"></i> Предсказания успешно сгенерированы!
+        </div>
+        <?php endif; ?>
+        
         <!-- Статистика -->
         <div class="stats-cards">
             <div class="stat-card">
@@ -623,6 +956,16 @@ $stats = $stmt->fetch();
                     <p>Средняя точность</p>
                 </div>
             </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon icon-accent">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <div class="stat-details">
+                    <h3><?php echo $prediction_stats['total_predictions']; ?></h3>
+                    <p>Всего предсказаний</p>
+                </div>
+            </div>
         </div>
         
         <!-- Список моделей -->
@@ -630,7 +973,7 @@ $stats = $stmt->fetch();
             <div class="section-header">
                 <h2>Доступные модели</h2>
                 <?php if ($user['role'] == 'admin'): ?>
-                <a href="model_add.php" class="view-all">Добавить модель</a>
+                <button class="view-all" onclick="openModal()">Добавить модель</button>
                 <?php endif; ?>
             </div>
             
@@ -664,9 +1007,10 @@ $stats = $stmt->fetch();
                                 <a href="model_details.php?id=<?php echo $model['id']; ?>" class="btn btn-primary">Подробнее</a>
                                 <?php if ($user['role'] == 'admin'): ?>
                                     <?php if ($model['is_active']): ?>
-                                        <a href="model_deactivate.php?id=<?php echo $model['id']; ?>" class="btn btn-danger">Деактивировать</a>
+                                        <a href="ml_models.php?toggle=1&id=<?php echo $model['id']; ?>" class="btn btn-danger">Деактивировать</a>
+                                        <a href="ml_models.php?predict=1&id=<?php echo $model['id']; ?>" class="btn btn-warning">Запустить предсказание</a>
                                     <?php else: ?>
-                                        <a href="model_activate.php?id=<?php echo $model['id']; ?>" class="btn btn-success">Активировать</a>
+                                        <a href="ml_models.php?toggle=1&id=<?php echo $model['id']; ?>" class="btn btn-success">Активировать</a>
                                     <?php endif; ?>
                                 <?php endif; ?>
                             </div>
@@ -674,7 +1018,48 @@ $stats = $stmt->fetch();
                     <?php endforeach; ?>
                 </div>
             <?php else: ?>
-                <p>Нет доступных ML моделей.</p>
+                <p>Нет доступных ML моделей. <?php if ($user['role'] == 'admin'): ?><a href="#" onclick="openModal()">Добавить первую модель</a><?php endif; ?></p>
+            <?php endif; ?>
+        </div>
+        
+        <!-- Последние предсказания -->
+        <div class="section">
+            <div class="section-header">
+                <h2>Последние предсказания</h2>
+            </div>
+            
+            <?php if (count($recent_predictions) > 0): ?>
+                <?php foreach ($recent_predictions as $prediction): 
+                    $prediction_data = json_decode($prediction['prediction_data'], true);
+                ?>
+                    <div class="prediction-card">
+                        <div class="prediction-header">
+                            <div class="prediction-title">
+                                <?php echo $prediction['student_name']; ?> - <?php echo $prediction['test_title']; ?>
+                            </div>
+                            <div class="prediction-confidence">
+                                Уверенность: <?php echo round($prediction['confidence'] * 100); ?>%
+                            </div>
+                        </div>
+                        
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: <?php echo $prediction['confidence'] * 100; ?>%"></div>
+                        </div>
+                        
+                        <div class="prediction-details">
+                            <strong>Модель:</strong> <?php echo $prediction['model_name']; ?><br>
+                            <strong>Предсказанный результат:</strong> <?php echo $prediction_data['predicted_score']; ?> баллов<br>
+                            <strong>Уровень риска:</strong> 
+                            <?php 
+                            $risk_level = $prediction_data['risk_level'];
+                            $risk_color = $risk_level == 'low' ? 'success' : ($risk_level == 'medium' ? 'warning' : 'danger');
+                            echo "<span class='text-$risk_color'>" . ucfirst($risk_level) . "</span>";
+                            ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <p>Пока нет предсказаний. Запустите ML модель для генерации предсказаний.</p>
             <?php endif; ?>
         </div>
         
@@ -711,7 +1096,7 @@ $stats = $stmt->fetch();
                                 <td><?php echo date('d.m.Y H:i', strtotime($model['created_at'])); ?></td>
                                 <td>
                                     <a href="model_edit.php?id=<?php echo $model['id']; ?>" class="btn btn-primary">Редактировать</a>
-                                    <a href="model_delete.php?id=<?php echo $model['id']; ?>" class="btn btn-danger" onclick="return confirm('Вы уверены?')">Удалить</a>
+                                    <a href="ml_models.php?delete=1&id=<?php echo $model['id']; ?>" class="btn btn-danger" onclick="return confirm('Вы уверены, что хотите удалить эту модель?')">Удалить</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -722,6 +1107,50 @@ $stats = $stmt->fetch();
             <?php endif; ?>
         </div>
         <?php endif; ?>
+    </div>
+
+    <!-- Модальное окно добавления модели -->
+    <div id="addModelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Добавить новую модель</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            
+            <form method="POST" action="ml_models.php">
+                <div class="form-group">
+                    <label for="name">Название модели</label>
+                    <input type="text" id="name" name="name" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="description">Описание</label>
+                    <textarea id="description" name="description" class="form-control"></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="accuracy">Точность (0.0 - 1.0)</label>
+                    <input type="number" id="accuracy" name="accuracy" class="form-control" min="0" max="1" step="0.01" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="path">Путь к модели</label>
+                    <input type="text" id="path" name="path" class="form-control" required>
+                </div>
+                
+                <div class="form-group">
+                    <div class="form-check">
+                        <input type="checkbox" id="is_active" name="is_active" class="form-check-input" value="1" checked>
+                        <label for="is_active">Активная модель</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" name="add_model" class="btn btn-primary">Добавить модель</button>
+                    <button type="button" class="btn btn-danger" onclick="closeModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script>
@@ -739,6 +1168,23 @@ $stats = $stmt->fetch();
                 }
             });
         });
+        
+        // Функции для модального окна
+        function openModal() {
+            document.getElementById('addModelModal').style.display = 'block';
+        }
+        
+        function closeModal() {
+            document.getElementById('addModelModal').style.display = 'none';
+        }
+        
+        // Закрытие модального окна при клике вне его
+        window.onclick = function(event) {
+            const modal = document.getElementById('addModelModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
     </script>
 </body>
 </html>

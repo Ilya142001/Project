@@ -21,18 +21,25 @@ $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
+// Пагинация
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$per_page = 10;
+$offset = ($page - 1) * $per_page;
+
 // Обработка создания теста (если форма отправлена)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_test'])) {
     $title = trim($_POST['title']);
     $description = trim($_POST['description']);
+    $time_limit = isset($_POST['time_limit']) ? (int)$_POST['time_limit'] : 30;
     $is_published = isset($_POST['is_published']) ? 1 : 0;
     
     if (!empty($title)) {
         try {
-            $stmt = $pdo->prepare("INSERT INTO tests (title, description, is_published, created_by) VALUES (?, ?, ?, ?)");
-            $stmt->execute([$title, $description, $is_published, $_SESSION['user_id']]);
+            $stmt = $pdo->prepare("INSERT INTO tests (title, description, time_limit, is_published, created_by) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$title, $description, $time_limit, $is_published, $_SESSION['user_id']]);
             
             $test_id = $pdo->lastInsertId();
+            $_SESSION['success_message'] = "Тест успешно создан! Теперь добавьте вопросы.";
             header("Location: test_edit.php?id=" . $test_id);
             exit;
             
@@ -46,23 +53,46 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['create_test'])) {
 
 // Получаем тесты в зависимости от роли пользователя
 if ($user['role'] == 'student') {
+    // Поиск и фильтрация
+    $search = isset($_GET['search']) ? "%".trim($_GET['search'])."%" : "%";
+    
     // Тесты для студента (только опубликованные)
     $stmt = $pdo->prepare("
-        SELECT t.*, u.full_name as creator_name
+        SELECT t.*, u.full_name as creator_name,
+               (SELECT COUNT(*) FROM questions WHERE test_id = t.id) as question_count
         FROM tests t
         JOIN users u ON t.created_by = u.id
         WHERE t.is_published = TRUE 
+        AND t.is_active = TRUE
+        AND (t.title LIKE ? OR t.description LIKE ? OR u.full_name LIKE ?)
         AND t.id NOT IN (
             SELECT test_id FROM test_results WHERE user_id = ?
         )
         ORDER BY t.created_at DESC
+        LIMIT ? OFFSET ?
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$search, $search, $search, $_SESSION['user_id'], $per_page, $offset]);
     $tests = $stmt->fetchAll();
+    
+    // Общее количество для пагинации
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as total
+        FROM tests t
+        JOIN users u ON t.created_by = u.id
+        WHERE t.is_published = TRUE 
+        AND t.is_active = TRUE
+        AND (t.title LIKE ? OR t.description LIKE ? OR u.full_name LIKE ?)
+        AND t.id NOT IN (
+            SELECT test_id FROM test_results WHERE user_id = ?
+        )
+    ");
+    $stmt->execute([$search, $search, $search, $_SESSION['user_id']]);
+    $total_tests = $stmt->fetch()['total'];
+    $total_pages = ceil($total_tests / $per_page);
     
     // Пройденные тесты
     $stmt = $pdo->prepare("
-        SELECT t.*, tr.score, tr.total_points, tr.completed_at 
+        SELECT t.*, tr.score, tr.total_points, tr.completed_at, tr.percentage, tr.passed
         FROM test_results tr
         JOIN tests t ON tr.test_id = t.id
         WHERE tr.user_id = ?
@@ -72,20 +102,69 @@ if ($user['role'] == 'student') {
     $completed_tests = $stmt->fetchAll();
     
 } else if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
-    // Тесты для преподавателя/администратора
-    $stmt = $pdo->prepare("
+    // Поиск и фильтрация
+    $search = isset($_GET['search']) ? "%".trim($_GET['search'])."%" : "%";
+    $status_filter = isset($_GET['status']) ? $_GET['status'] : 'all';
+    
+    // Базовый запрос
+    $query = "
         SELECT t.*, 
                COUNT(tr.id) as attempts,
                COUNT(DISTINCT tr.user_id) as unique_students,
-               (SELECT COUNT(*) FROM questions WHERE test_id = t.id) as question_count
+               (SELECT COUNT(*) FROM questions WHERE test_id = t.id) as question_count,
+               AVG(tr.percentage) as avg_score
         FROM tests t
         LEFT JOIN test_results tr ON t.id = tr.test_id
         WHERE t.created_by = ?
-        GROUP BY t.id
-        ORDER BY t.created_at DESC
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
+        AND (t.title LIKE ? OR t.description LIKE ?)
+    ";
+    
+    // Добавляем фильтр по статусу
+    $params = [$_SESSION['user_id'], $search, $search];
+    if ($status_filter == 'published') {
+        $query .= " AND t.is_published = TRUE";
+    } elseif ($status_filter == 'draft') {
+        $query .= " AND t.is_published = FALSE";
+    } elseif ($status_filter == 'active') {
+        $query .= " AND t.is_active = TRUE";
+    } elseif ($status_filter == 'inactive') {
+        $query .= " AND t.is_active = FALSE";
+    }
+    
+    $query .= " GROUP BY t.id ORDER BY t.created_at DESC LIMIT ? OFFSET ?";
+    $params[] = $per_page;
+    $params[] = $offset;
+    
+    // Тесты для преподавателя/администратора
+    $stmt = $pdo->prepare($query);
+    $stmt->execute($params);
     $tests = $stmt->fetchAll();
+    
+    // Общее количество для пагинации
+    $count_query = "
+        SELECT COUNT(DISTINCT t.id) as total
+        FROM tests t
+        WHERE t.created_by = ?
+        AND (t.title LIKE ? OR t.description LIKE ?)
+    ";
+    
+    $count_params = [$_SESSION['user_id'], $search, $search];
+    if ($status_filter != 'all') {
+        if ($status_filter == 'published') {
+            $count_query .= " AND t.is_published = TRUE";
+        } elseif ($status_filter == 'draft') {
+            $count_query .= " AND t.is_published = FALSE";
+        } elseif ($status_filter == 'active') {
+            $count_query .= " AND t.is_active = TRUE";
+        } elseif ($status_filter == 'inactive') {
+            $count_query .= " AND t.is_active = FALSE";
+        }
+    }
+    
+    $stmt = $pdo->prepare($count_query);
+    $stmt->execute($count_params);
+    $total_tests = $stmt->fetch()['total'];
+    $total_pages = ceil($total_tests / $per_page);
 }
 ?>
 
@@ -96,6 +175,7 @@ if ($user['role'] == 'student') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Тесты - Система интеллектуальной оценки знаний</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Стили из dashboard.php */
         * {
@@ -167,6 +247,13 @@ if ($user['role'] == 'student') {
             font-weight: bold;
             margin-right: 15px;
             color: white;
+            overflow: hidden;
+        }
+        
+        .user-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .user-details h3 {
@@ -257,6 +344,12 @@ if ($user['role'] == 'student') {
             color: var(--gray);
         }
         
+        .search-filters {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
         .search-box {
             display: flex;
             align-items: center;
@@ -276,6 +369,16 @@ if ($user['role'] == 'student') {
         
         .search-box i {
             color: var(--gray);
+        }
+        
+        .filter-select {
+            padding: 10px 15px;
+            border-radius: 30px;
+            border: 1px solid #ddd;
+            background: white;
+            font-size: 14px;
+            outline: none;
+            cursor: pointer;
         }
         
         /* Sections */
@@ -320,6 +423,7 @@ if ($user['role'] == 'student') {
             background: var(--light);
             border-radius: 8px;
             transition: transform 0.2s;
+            border-left: 4px solid var(--primary);
         }
         
         .test-item:hover {
@@ -365,6 +469,11 @@ if ($user['role'] == 'student') {
             display: inline-block;
         }
         
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
         .btn-primary {
             background: var(--primary);
             color: white;
@@ -401,6 +510,11 @@ if ($user['role'] == 'student') {
             opacity: 0.9;
         }
         
+        .btn-secondary {
+            background: var(--gray);
+            color: white;
+        }
+        
         /* Table */
         .data-table {
             width: 100%;
@@ -435,6 +549,12 @@ if ($user['role'] == 'student') {
             padding: 15px;
             border-radius: 8px;
             text-align: center;
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
         
         .stat-number {
@@ -584,7 +704,6 @@ if ($user['role'] == 'student') {
             border-radius: 12px;
             font-size: 12px;
             font-weight: 500;
-            margin-left: 10px;
         }
         
         .status-published {
@@ -595,6 +714,67 @@ if ($user['role'] == 'student') {
         .status-draft {
             background: var(--gray);
             color: white;
+        }
+        
+        .status-active {
+            background: var(--success);
+            color: white;
+        }
+        
+        .status-inactive {
+            background: var(--accent);
+            color: white;
+        }
+        
+        /* Progress bar */
+        .progress-bar {
+            height: 8px;
+            background: #eee;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 5px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: var(--success);
+            border-radius: 4px;
+        }
+        
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+            gap: 5px;
+        }
+        
+        .pagination a, .pagination span {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 5px;
+            text-decoration: none;
+            color: var(--secondary);
+            border: 1px solid #ddd;
+        }
+        
+        .pagination a:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        .pagination .current {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        
+        /* Charts */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 20px;
         }
         
         /* Responsive */
@@ -627,6 +807,11 @@ if ($user['role'] == 'student') {
             .main-content {
                 margin-left: 70px;
             }
+            
+            .search-filters {
+                flex-direction: column;
+                align-items: flex-start;
+            }
         }
         
         @media (max-width: 768px) {
@@ -635,8 +820,16 @@ if ($user['role'] == 'student') {
                 align-items: flex-start;
             }
             
-            .search-box {
+            .search-filters {
                 margin-top: 15px;
+                width: 100%;
+            }
+            
+            .search-box {
+                width: 100%;
+            }
+            
+            .search-box input {
                 width: 100%;
             }
             
@@ -657,6 +850,60 @@ if ($user['role'] == 'student') {
                 margin: 10% auto;
                 width: 95%;
             }
+            
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        /* Alert messages */
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border-left: 4px solid var(--success);
+        }
+        
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid var(--accent);
+        }
+        
+        .alert i {
+            margin-right: 10px;
+            font-size: 20px;
+        }
+        
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--gray);
+        }
+        
+        .empty-state i {
+            font-size: 50px;
+            margin-bottom: 15px;
+            color: #ddd;
+        }
+        
+        .empty-state p {
+            font-size: 16px;
+            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -667,45 +914,45 @@ if ($user['role'] == 'student') {
             <h1>Оценка знаний AI</h1>
         </div>
         
-         <div class="user-info">
-    <div class="user-avatar">
-        <?php 
-        $avatarPath = !empty($user['avatar']) ? $user['avatar'] : '1.jpg';
-        
-        // Проверяем, существует ли файл
-        if (file_exists($avatarPath)) {
-            echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
-        } else {
-            // Если файл не существует, показываем первую букву имени
-            $firstName = $user['full_name'];
-            // Преобразуем в UTF-8 на случай проблем с кодировкой
-            if (function_exists('mb_convert_encoding')) {
-                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
-            }
-            $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
-            echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
-        }
-        ?>
-    </div>
-    <div class="user-details">
-        <h3>Привет, <?php 
-            $nameParts = explode(' ', $user['full_name']);
-            $firstName = $nameParts[1];
-            if (function_exists('mb_convert_encoding')) {
-                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
-            }
-            echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
-        ?></h3>
-        <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
-        <span class="role-badge role-<?php echo $user['role']; ?>">
-            <?php 
-            if ($user['role'] == 'admin') echo 'Администратор';
-            else if ($user['role'] == 'teacher') echo 'Преподаватель';
-            else echo 'Студент';
-            ?>
-        </span>
-    </div>
-</div>
+        <div class="user-info">
+            <div class="user-avatar">
+                <?php 
+                $avatarPath = !empty($user['avatar']) ? $user['avatar'] : 'default-avatar.png';
+                
+                // Проверяем, существует ли файл
+                if (file_exists($avatarPath)) {
+                    echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
+                } else {
+                    // Если файл не существует, показываем первую букву имени
+                    $firstName = $user['full_name'];
+                    // Преобразуем в UTF-8 на случай проблем с кодировкой
+                    if (function_exists('mb_convert_encoding')) {
+                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                    }
+                    $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+                    echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
+                }
+                ?>
+            </div>
+            <div class="user-details">
+                <h3>Привет, <?php 
+                    $nameParts = explode(' ', $user['full_name']);
+                    $firstName = $nameParts[1] ?? $nameParts[0];
+                    if (function_exists('mb_convert_encoding')) {
+                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                    }
+                    echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
+                ?></h3>
+                <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
+                <span class="role-badge role-<?php echo $user['role']; ?>">
+                    <?php 
+                    if ($user['role'] == 'admin') echo 'Администратор';
+                    else if ($user['role'] == 'teacher') echo 'Преподаватель';
+                    else echo 'Студент';
+                    ?>
+                </span>
+            </div>
+        </div>
         
         <ul class="nav-links">
             <li><a href="dashboard.php"><i class="fas fa-th-large"></i> <span>Главная</span></a></li>
@@ -728,17 +975,34 @@ if ($user['role'] == 'student') {
                 <p>Все доступные тесты и результаты</p>
             </div>
             
-            <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="text" placeholder="Поиск тестов...">
+            <div class="search-filters">
+                <form method="GET" action="" class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" name="search" placeholder="Поиск тестов..." 
+                           value="<?php echo isset($_GET['search']) ? htmlspecialchars($_GET['search']) : ''; ?>">
+                </form>
+                
+                <?php if ($user['role'] == 'teacher' || $user['role'] == 'admin'): ?>
+                <select class="filter-select" onchange="this.form.submit()" name="status">
+                    <option value="all" <?php echo (!isset($_GET['status']) || $_GET['status'] == 'all') ? 'selected' : ''; ?>>Все тесты</option>
+                    <option value="published" <?php echo (isset($_GET['status']) && $_GET['status'] == 'published') ? 'selected' : ''; ?>>Опубликованные</option>
+                    <option value="draft" <?php echo (isset($_GET['status']) && $_GET['status'] == 'draft') ? 'selected' : ''; ?>>Черновики</option>
+                    <option value="active" <?php echo (isset($_GET['status']) && $_GET['status'] == 'active') ? 'selected' : ''; ?>>Активные</option>
+                    <option value="inactive" <?php echo (isset($_GET['status']) && $_GET['status'] == 'inactive') ? 'selected' : ''; ?>>Неактивные</option>
+                </select>
+                <?php endif; ?>
             </div>
         </div>
         
+        <?php if (isset($success_message)): ?>
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i> <?php echo $success_message; ?>
+            </div>
+        <?php endif; ?>
+        
         <?php if (isset($error)): ?>
-            <div class="section" style="border-left: 4px solid var(--accent);">
-                <div style="color: var(--accent); font-weight: 500;">
-                    <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
-                </div>
+            <div class="alert alert-error">
+                <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
             </div>
         <?php endif; ?>
         
@@ -747,6 +1011,7 @@ if ($user['role'] == 'student') {
             <div class="section">
                 <div class="section-header">
                     <h2>Доступные тесты</h2>
+                    <span class="badge"><?php echo $total_tests; ?> тестов</span>
                 </div>
                 
                 <div class="test-list">
@@ -756,7 +1021,10 @@ if ($user['role'] == 'student') {
                                 <div class="test-title"><?php echo $test['title']; ?></div>
                                 <div class="test-meta">
                                     <span>Автор: <?php echo $test['creator_name']; ?></span>
-                                    <span>Создан: <?php echo date('d.m.Y', strtotime($test['created_at'])); ?></span>
+                                    <span>Вопросов: <?php echo $test['question_count']; ?></span>
+                                </div>
+                                <div class="test-meta">
+                                    <span>Лимит времени: <?php echo $test['time_limit']; ?> мин.</span>
                                 </div>
                                 <?php if (!empty($test['description'])): ?>
                                 <div class="test-meta">
@@ -769,9 +1037,36 @@ if ($user['role'] == 'student') {
                             </div>
                         <?php endforeach; ?>
                     <?php else: ?>
-                        <p>Нет доступных тестов для прохождения.</p>
+                        <div class="empty-state">
+                            <i class="fas fa-file-alt"></i>
+                            <p>Нет доступных тестов для прохождения.</p>
+                            <?php if (isset($_GET['search'])): ?>
+                                <a href="tests.php" class="btn btn-primary">Сбросить поиск</a>
+                            <?php endif; ?>
+                        </div>
                     <?php endif; ?>
                 </div>
+                
+                <!-- Пагинация -->
+                <?php if ($total_pages > 1): ?>
+                <div class="pagination">
+                    <?php if ($page > 1): ?>
+                        <a href="?page=<?php echo $page-1; ?><?php echo isset($_GET['search']) ? '&search='.$_GET['search'] : ''; ?>">&laquo;</a>
+                    <?php endif; ?>
+                    
+                    <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                        <?php if ($i == $page): ?>
+                            <span class="current"><?php echo $i; ?></span>
+                        <?php else: ?>
+                            <a href="?page=<?php echo $i; ?><?php echo isset($_GET['search']) ? '&search='.$_GET['search'] : ''; ?>"><?php echo $i; ?></a>
+                        <?php endif; ?>
+                    <?php endfor; ?>
+                    
+                    <?php if ($page < $total_pages): ?>
+                        <a href="?page=<?php echo $page+1; ?><?php echo isset($_GET['search']) ? '&search='.$_GET['search'] : ''; ?>">&raquo;</a>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
             </div>
             
             <div class="section">
@@ -785,6 +1080,8 @@ if ($user['role'] == 'student') {
                             <tr>
                                 <th>Тест</th>
                                 <th>Результат</th>
+                                <th>Процент</th>
+                                <th>Статус</th>
                                 <th>Дата прохождения</th>
                                 <th>Действия</th>
                             </tr>
@@ -794,16 +1091,30 @@ if ($user['role'] == 'student') {
                                 <tr>
                                     <td><?php echo $test['title']; ?></td>
                                     <td><?php echo $test['score']; ?>/<?php echo $test['total_points']; ?></td>
+                                    <td>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" style="width: <?php echo $test['percentage']; ?>%"></div>
+                                        </div>
+                                        <?php echo round($test['percentage'], 1); ?>%
+                                    </td>
+                                    <td>
+                                        <span class="status-badge <?php echo $test['passed'] ? 'status-success' : 'status-error'; ?>">
+                                            <?php echo $test['passed'] ? 'Сдан' : 'Не сдан'; ?>
+                                        </span>
+                                    </td>
                                     <td><?php echo date('d.m.Y H:i', strtotime($test['completed_at'])); ?></td>
                                     <td>
-                                        <a href="test_result.php?id=<?php echo $test['id']; ?>" class="btn btn-success">Подробнее</a>
+                                        <a href="test_result.php?id=<?php echo $test['id']; ?>" class="btn btn-success btn-sm">Подробнее</a>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
                 <?php else: ?>
-                    <p>Вы еще не прошли ни одного теста.</p>
+                    <div class="empty-state">
+                        <i class="fas fa-clipboard-list"></i>
+                        <p>Вы еще не прошли ни одного теста.</p>
+                    </div>
                 <?php endif; ?>
             </div>
             
@@ -823,12 +1134,22 @@ if ($user['role'] == 'student') {
                 $total_questions = 0;
                 $total_attempts = 0;
                 $total_students = 0;
+                $published_tests = 0;
+                $draft_tests = 0;
                 
                 foreach ($tests as $test) {
                     $total_questions += $test['question_count'];
                     $total_attempts += $test['attempts'];
                     $total_students += $test['unique_students'];
+                    
+                    if ($test['is_published']) {
+                        $published_tests++;
+                    } else {
+                        $draft_tests++;
+                    }
                 }
+                
+                $avg_score = $total_attempts > 0 ? round(array_sum(array_column($tests, 'avg_score')) / $total_tests, 1) : 0;
                 ?>
                 
                 <div class="stats-grid">
@@ -848,6 +1169,18 @@ if ($user['role'] == 'student') {
                         <div class="stat-number"><?php echo $total_students; ?></div>
                         <div class="stat-label">Уникальных студентов</div>
                     </div>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $published_tests; ?></div>
+                        <div class="stat-label">Опубликовано</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $draft_tests; ?></div>
+                        <div class="stat-label">Черновиков</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-number"><?php echo $avg_score; ?>%</div>
+                        <div class="stat-label">Средний результат</div>
+                    </div>
                 </div>
                 
                 <?php if (count($tests) > 0): ?>
@@ -858,6 +1191,7 @@ if ($user['role'] == 'student') {
                                 <th>Вопросов</th>
                                 <th>Попыток</th>
                                 <th>Уникальных студентов</th>
+                                <th>Средний балл</th>
                                 <th>Статус</th>
                                 <th>Дата создания</th>
                                 <th>Действия</th>
@@ -878,31 +1212,71 @@ if ($user['role'] == 'student') {
                                     <td><?php echo $test['attempts']; ?></td>
                                     <td><?php echo $test['unique_students']; ?></td>
                                     <td>
+                                        <?php if ($test['attempts'] > 0): ?>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" style="width: <?php echo $test['avg_score'] ? round($test['avg_score']) : 0; ?>%"></div>
+                                        </div>
+                                        <?php echo $test['avg_score'] ? round($test['avg_score'], 1) : 0; ?>%
+                                        <?php else: ?>
+                                        Нет данных
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
                                         <span class="status-badge <?php echo $test['is_published'] ? 'status-published' : 'status-draft'; ?>">
                                             <?php echo $test['is_published'] ? 'Опубликован' : 'Черновик'; ?>
+                                        </span>
+                                        <span class="status-badge <?php echo $test['is_active'] ? 'status-active' : 'status-inactive'; ?>">
+                                            <?php echo $test['is_active'] ? 'Активен' : 'Неактивен'; ?>
                                         </span>
                                     </td>
                                     <td><?php echo date('d.m.Y', strtotime($test['created_at'])); ?></td>
                                     <td>
                                         <div class="test-actions">
-                                            <a href="test_edit.php?id=<?php echo $test['id']; ?>" class="btn btn-primary" title="Редактировать">
+                                            <a href="test_edit.php?id=<?php echo $test['id']; ?>" class="btn btn-primary btn-sm" title="Редактировать">
                                                 <i class="fas fa-edit"></i>
                                             </a>
-                                            <a href="test_results_view.php?test_id=<?php echo $test['id']; ?>" class="btn btn-success" title="Результаты">
+                                            <a href="test_results_view.php?test_id=<?php echo $test['id']; ?>" class="btn btn-success btn-sm" title="Результаты">
                                                 <i class="fas fa-chart-bar"></i>
                                             </a>
-                                           <a href="test_delete.php?id=<?php echo $test['id']; ?>" class="btn btn-danger" title="Удалить" 
-   onclick="return confirm('Вы уверены, что хотите удалить тест \'<?php echo addslashes($test['title']); ?>\'? Все связанные вопросы и результаты также будут удалены!')">
-    <i class="fas fa-trash"></i>
-</a>
+                                           <a href="test_delete.php?id=<?php echo $test['id']; ?>" class="btn btn-danger btn-sm" title="Удалить" 
+                                               onclick="return confirm('Вы уверены, что хотите удалить тест \'<?php echo addslashes($test['title']); ?>\'? Все связанные вопросы и результаты также будут удалены!')">
+                                                <i class="fas fa-trash"></i>
+                                            </a>
                                         </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
                     </table>
+                    
+                    <!-- Пагинация -->
+                    <?php if ($total_pages > 1): ?>
+                    <div class="pagination">
+                        <?php if ($page > 1): ?>
+                            <a href="?page=<?php echo $page-1; ?><?php echo isset($_GET['search']) ? '&search='.$_GET['search'] : ''; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>">&laquo;</a>
+                        <?php endif; ?>
+                        
+                        <?php for ($i = 1; $i <= $total_pages; $i++): ?>
+                            <?php if ($i == $page): ?>
+                                <span class="current"><?php echo $i; ?></span>
+                            <?php else: ?>
+                                <a href="?page=<?php echo $i; ?><?php echo isset($_GET['search']) ? '&search='.$_GET['search'] : ''; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>"><?php echo $i; ?></a>
+                            <?php endif; ?>
+                        <?php endfor; ?>
+                        
+                        <?php if ($page < $total_pages): ?>
+                            <a href="?page=<?php echo $page+1; ?><?php echo isset($_GET['search']) ? '&search='.$_GET['search'] : ''; ?><?php echo isset($_GET['status']) ? '&status='.$_GET['status'] : ''; ?>">&raquo;</a>
+                        <?php endif; ?>
+                    </div>
+                    <?php endif; ?>
                 <?php else: ?>
-                    <p>Вы еще не создали ни одного теста. Нажмите "Создать тест" чтобы начать.</p>
+                    <div class="empty-state">
+                        <i class="fas fa-file-alt"></i>
+                        <p>Вы еще не создали ни одного теста.</p>
+                        <button class="btn btn-primary" onclick="openModal()">
+                            <i class="fas fa-plus"></i> Создать первый тест
+                        </button>
+                    </div>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
@@ -927,6 +1301,12 @@ if ($user['role'] == 'student') {
                         <label for="description">Описание теста</label>
                         <textarea id="description" name="description" class="form-control" 
                                   placeholder="Опишите содержание теста, его цели и особенности" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="time_limit">Лимит времени (минут)</label>
+                        <input type="number" id="time_limit" name="time_limit" class="form-control" 
+                               value="30" min="5" max="300">
                     </div>
                     
                     <div class="checkbox-group">
@@ -969,19 +1349,54 @@ if ($user['role'] == 'student') {
             });
         });
         
-        // Поиск тестов
+        // Поиск тестов с задержкой
+        let searchTimeout;
         document.querySelector('.search-box input').addEventListener('input', function(e) {
-            const searchTerm = e.target.value.toLowerCase();
-            
-            document.querySelectorAll('.test-item, .data-table tbody tr').forEach(item => {
-                const text = item.textContent.toLowerCase();
-                if (text.includes(searchTerm)) {
-                    item.style.display = '';
-                } else {
-                    item.style.display = 'none';
-                }
-            });
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                this.form.submit();
+            }, 800);
         });
+        
+        // Инициализация графиков для преподавателей
+        <?php if (($user['role'] == 'teacher' || $user['role'] == 'admin') && count($tests) > 0): ?>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Создаем график распределения статусов тестов
+            const statusCtx = document.getElementById('testStatusChart');
+            if (statusCtx) {
+                const statusChart = new Chart(statusCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Опубликованные', 'Черновики'],
+                        datasets: [{
+                            data: [<?php echo $published_tests; ?>, <?php echo $draft_tests; ?>],
+                            backgroundColor: [
+                                'rgba(46, 204, 113, 0.8)',
+                                'rgba(127, 140, 141, 0.8)'
+                            ],
+                            borderColor: [
+                                'rgba(46, 204, 113, 1)',
+                                'rgba(127, 140, 141, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                            },
+                            title: {
+                                display: true,
+                                text: 'Распределение тестов по статусам'
+                            }
+                        }
+                    }
+                });
+            }
+        });
+        <?php endif; ?>
     </script>
 </body>
 </html>

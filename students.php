@@ -115,6 +115,32 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
         exit;
     }
 }
+
+// Обработка экспорта данных
+if (isset($_GET['action']) && $_GET['action'] == 'export_students') {
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename=students_' . date('Y-m-d') . '.csv');
+    
+    $output = fopen('php://output', 'w');
+    fputcsv($output, ['ФИО', 'Email', 'Попыток', 'Общий балл', 'Успеваемость', 'Дата регистрации'], ';');
+    
+    foreach ($students as $student) {
+        $performance = $student['total_points'] > 0 ? 
+            round(($student['total_score'] / $student['total_points']) * 100, 1) : 0;
+            
+        fputcsv($output, [
+            $student['full_name'],
+            $student['email'],
+            $student['test_attempts'],
+            $student['total_score'] . '/' . $student['total_points'],
+            $performance . '%',
+            date('d.m.Y', strtotime($student['created_at']))
+        ], ';');
+    }
+    
+    fclose($output);
+    exit;
+}
 ?>
 
 <!DOCTYPE html>
@@ -124,6 +150,8 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Студенты - Система интеллектуальной оценки знаний</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Стили из dashboard.php */
         * {
@@ -324,6 +352,12 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
             display: flex;
             align-items: center;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
         
         .stat-icon {
@@ -456,6 +490,20 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             opacity: 0.9;
         }
         
+        .btn-warning {
+            background: var(--warning);
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            opacity: 0.9;
+        }
+        
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
         /* Student card */
         .student-card {
             display: flex;
@@ -464,6 +512,13 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             background: var(--light);
             border-radius: 8px;
             margin-bottom: 10px;
+            transition: transform 0.3s, box-shadow 0.3s;
+            cursor: pointer;
+        }
+        
+        .student-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
         
         .student-avatar {
@@ -545,7 +600,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             padding: 0;
             border-radius: 10px;
             width: 90%;
-            max-width: 700px;
+            max-width: 800px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.3);
             animation: slideIn 0.3s;
             max-height: 80vh;
@@ -642,6 +697,11 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             padding: 15px;
             border-radius: 8px;
             text-align: center;
+            transition: transform 0.3s;
+        }
+        
+        .stat-item:hover {
+            transform: translateY(-3px);
         }
         
         .stat-value {
@@ -672,6 +732,11 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             justify-content: space-between;
             padding: 10px 0;
             border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.3s;
+        }
+        
+        .test-result-item:hover {
+            background-color: #f9f9f9;
         }
         
         .test-result-item:last-child {
@@ -696,6 +761,106 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             text-align: center;
             color: var(--gray);
             padding: 20px;
+        }
+        
+        /* Фильтры */
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .filter-item label {
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: var(--secondary);
+        }
+        
+        .filter-item select, .filter-item input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        /* Действия */
+        .actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        /* График */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 20px;
+        }
+        
+        /* Уведомления */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 5px;
+            color: white;
+            z-index: 1100;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+            transform: translateX(100%);
+            transition: transform 0.3s;
+        }
+        
+        .notification.show {
+            transform: translateX(0);
+        }
+        
+        .notification-success {
+            background-color: var(--success);
+        }
+        
+        .notification-error {
+            background-color: var(--accent);
+        }
+        
+        .notification-info {
+            background-color: var(--primary);
+        }
+        
+        /* Сортировка */
+        .sortable {
+            cursor: pointer;
+            position: relative;
+            padding-right: 20px !important;
+        }
+        
+        .sortable:after {
+            content: '↕';
+            position: absolute;
+            right: 5px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 12px;
+            opacity: 0.5;
+        }
+        
+        .sortable.asc:after {
+            content: '↑';
+            opacity: 1;
+        }
+        
+        .sortable.desc:after {
+            content: '↓';
+            opacity: 1;
         }
         
         @keyframes fadeIn {
@@ -782,6 +947,10 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             
             .profile-stats {
                 grid-template-columns: 1fr 1fr;
+            }
+            
+            .filters {
+                flex-direction: column;
             }
         }
         
@@ -902,6 +1071,84 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                     <p>Средняя успеваемость</p>
                 </div>
             </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon icon-accent">
+                    <i class="fas fa-graduation-cap"></i>
+                </div>
+                <div class="stat-details">
+                    <h3><?php 
+                    $passedCount = 0;
+                    foreach ($students as $student) {
+                        $performance = $student['total_points'] > 0 ? 
+                            round(($student['total_score'] / $student['total_points']) * 100, 1) : 0;
+                        if ($performance >= 60) $passedCount++;
+                    }
+                    echo $passedCount;
+                    ?></h3>
+                    <p>Успевающих студентов</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Фильтры и действия -->
+        <div class="section">
+            <div class="section-header">
+                <h2>Фильтры и действия</h2>
+            </div>
+            
+            <div class="filters">
+                <div class="filter-item">
+                    <label for="performanceFilter">Успеваемость</label>
+                    <select id="performanceFilter">
+                        <option value="all">Все студенты</option>
+                        <option value="excellent">Отлично (80-100%)</option>
+                        <option value="good">Хорошо (60-79%)</option>
+                        <option value="satisfactory">Удовлетворительно (40-59%)</option>
+                        <option value="poor">Неудовлетворительно (0-39%)</option>
+                    </select>
+                </div>
+                
+                <div class="filter-item">
+                    <label for="attemptsFilter">Попытки тестов</label>
+                    <select id="attemptsFilter">
+                        <option value="all">Все студенты</option>
+                        <option value="none">Нет попыток</option>
+                        <option value="1-3">1-3 попытки</option>
+                        <option value="4-10">4-10 попыток</option>
+                        <option value="10+">Более 10 попыток</option>
+                    </select>
+                </div>
+                
+                <div class="filter-item">
+                    <label for="sortBy">Сортировка</label>
+                    <select id="sortBy">
+                        <option value="name">По имени</option>
+                        <option value="performance">По успеваемости</option>
+                        <option value="attempts">По количеству попыток</option>
+                        <option value="registration">По дате регистрации</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="actions">
+                <button class="btn btn-primary" id="exportBtn">
+                    <i class="fas fa-download"></i> Экспорт в CSV
+                </button>
+                <button class="btn btn-warning" id="resetFiltersBtn">
+                    <i class="fas fa-redo"></i> Сбросить фильтры
+                </button>
+            </div>
+        </div>
+        
+        <!-- График успеваемости -->
+        <div class="section">
+            <div class="section-header">
+                <h2>График успеваемости студентов</h2>
+            </div>
+            <div class="chart-container">
+                <canvas id="performanceChart"></canvas>
+            </div>
         </div>
         
         <!-- Список студентов -->
@@ -916,7 +1163,10 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                     <?php foreach ($students as $student): 
                         $performance = $student['total_points'] > 0 ? round(($student['total_score'] / $student['total_points']) * 100, 1) : 0;
                     ?>
-                        <div class="student-card" data-name="<?php echo strtolower($student['full_name']); ?>">
+                        <div class="student-card" data-name="<?php echo strtolower($student['full_name']); ?>" 
+                             data-performance="<?php echo $performance; ?>" 
+                             data-attempts="<?php echo $student['test_attempts']; ?>"
+                             data-created="<?php echo strtotime($student['created_at']); ?>">
                             <div class="student-avatar">
                                 <?php echo strtoupper(substr($student['full_name'], 0, 1)); ?>
                             </div>
@@ -950,12 +1200,12 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th>Студент</th>
+                            <th class="sortable" data-sort="name">Студент</th>
                             <th>Email</th>
-                            <th>Попыток</th>
+                            <th class="sortable" data-sort="attempts">Попыток</th>
                             <th>Общий балл</th>
-                            <th>Успеваемость</th>
-                            <th>Дата регистрации</th>
+                            <th class="sortable" data-sort="performance">Успеваемость</th>
+                            <th class="sortable" data-sort="registration">Дата регистрации</th>
                             <th>Действия</th>
                         </tr>
                     </thead>
@@ -963,7 +1213,10 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                         <?php foreach ($students as $student): 
                             $performance = $student['total_points'] > 0 ? round(($student['total_score'] / $student['total_points']) * 100, 1) : 0;
                         ?>
-                            <tr>
+                            <tr data-name="<?php echo strtolower($student['full_name']); ?>" 
+                                data-performance="<?php echo $performance; ?>" 
+                                data-attempts="<?php echo $student['test_attempts']; ?>"
+                                data-created="<?php echo strtotime($student['created_at']); ?>">
                                 <td><?php echo $student['full_name']; ?></td>
                                 <td><?php echo $student['email']; ?></td>
                                 <td><?php echo $student['test_attempts']; ?></td>
@@ -976,8 +1229,17 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                                 </td>
                                 <td><?php echo date('d.m.Y', strtotime($student['created_at'])); ?></td>
                                 <td>
-                                    <button class="btn btn-primary view-profile" data-id="<?php echo $student['id']; ?>">Профиль</button>
-                                    <a href="student_results.php?id=<?php echo $student['id']; ?>" class="btn btn-success">Результаты</a>
+                                    <button class="btn btn-primary btn-sm view-profile" data-id="<?php echo $student['id']; ?>">
+                                        <i class="fas fa-user"></i> Профиль
+                                    </button>
+                                    <a href="student_results.php?id=<?php echo $student['id']; ?>" class="btn btn-success btn-sm">
+                                        <i class="fas fa-chart-bar"></i> Результаты
+                                    </a>
+                                    <?php if ($user['role'] == 'admin'): ?>
+                                    <button class="btn btn-danger btn-sm delete-student" data-id="<?php echo $student['id']; ?>" data-name="<?php echo $student['full_name']; ?>">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -1002,21 +1264,215 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
         </div>
     </div>
 
+    <!-- Уведомление -->
+    <div id="notification" class="notification">
+        <i class="fas fa-info-circle"></i>
+        <span id="notificationText"></span>
+    </div>
+
     <script>
         // Поиск студентов
         document.getElementById('searchInput').addEventListener('input', function() {
-            const searchTerm = this.value.toLowerCase();
-            const studentCards = document.querySelectorAll('.student-card');
+            filterStudents();
+        });
+        
+        // Фильтры
+        document.getElementById('performanceFilter').addEventListener('change', filterStudents);
+        document.getElementById('attemptsFilter').addEventListener('change', filterStudents);
+        document.getElementById('sortBy').addEventListener('change', sortStudents);
+        
+        // Сброс фильтров
+        document.getElementById('resetFiltersBtn').addEventListener('click', function() {
+            document.getElementById('performanceFilter').value = 'all';
+            document.getElementById('attemptsFilter').value = 'all';
+            document.getElementById('sortBy').value = 'name';
+            document.getElementById('searchInput').value = '';
             
-            studentCards.forEach(card => {
-                const studentName = card.getAttribute('data-name');
-                if (studentName.includes(searchTerm)) {
-                    card.style.display = 'flex';
-                } else {
-                    card.style.display = 'none';
-                }
+            filterStudents();
+            showNotification('Фильтры сброшены', 'success');
+        });
+        
+        // Экспорт данных
+        document.getElementById('exportBtn').addEventListener('click', function() {
+            window.location.href = 'students.php?action=export_students';
+        });
+        
+        // Сортировка таблицы
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.addEventListener('click', function() {
+                const sortBy = this.getAttribute('data-sort');
+                const currentlySorted = this.classList.contains('asc') || this.classList.contains('desc');
+                const newDirection = currentlySorted && this.classList.contains('asc') ? 'desc' : 'asc';
+                
+                // Сбрасываем сортировку для всех заголовков
+                document.querySelectorAll('.sortable').forEach(item => {
+                    item.classList.remove('asc', 'desc');
+                });
+                
+                // Устанавливаем новую сортировку
+                this.classList.add(newDirection);
+                
+                // Сортируем таблицу
+                sortTable(sortBy, newDirection);
             });
         });
+        
+        // Функция фильтрации студентов
+        function filterStudents() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const performanceFilter = document.getElementById('performanceFilter').value;
+            const attemptsFilter = document.getElementById('attemptsFilter').value;
+            
+            // Фильтрация карточек студентов
+            const studentCards = document.querySelectorAll('.student-card');
+            studentCards.forEach(card => {
+                const studentName = card.getAttribute('data-name');
+                const performance = parseInt(card.getAttribute('data-performance'));
+                const attempts = parseInt(card.getAttribute('data-attempts'));
+                
+                let show = true;
+                
+                // Поиск по имени
+                if (searchTerm && !studentName.includes(searchTerm)) {
+                    show = false;
+                }
+                
+                // Фильтр по успеваемости
+                if (show && performanceFilter !== 'all') {
+                    if (performanceFilter === 'excellent' && (performance < 80 || performance > 100)) show = false;
+                    if (performanceFilter === 'good' && (performance < 60 || performance >= 80)) show = false;
+                    if (performanceFilter === 'satisfactory' && (performance < 40 || performance >= 60)) show = false;
+                    if (performanceFilter === 'poor' && (performance < 0 || performance >= 40)) show = false;
+                }
+                
+                // Фильтр по попыткам
+                if (show && attemptsFilter !== 'all') {
+                    if (attemptsFilter === 'none' && attempts !== 0) show = false;
+                    if (attemptsFilter === '1-3' && (attempts < 1 || attempts > 3)) show = false;
+                    if (attemptsFilter === '4-10' && (attempts < 4 || attempts > 10)) show = false;
+                    if (attemptsFilter === '10+' && attempts <= 10) show = false;
+                }
+                
+                card.style.display = show ? 'flex' : 'none';
+            });
+            
+            // Фильтрация строк таблицы
+            const tableRows = document.querySelectorAll('.data-table tbody tr');
+            tableRows.forEach(row => {
+                const studentName = row.getAttribute('data-name');
+                const performance = parseInt(row.getAttribute('data-performance'));
+                const attempts = parseInt(row.getAttribute('data-attempts'));
+                
+                let show = true;
+                
+                // Поиск по имени
+                if (searchTerm && !studentName.includes(searchTerm)) {
+                    show = false;
+                }
+                
+                // Фильтр по успеваемости
+                if (show && performanceFilter !== 'all') {
+                    if (performanceFilter === 'excellent' && (performance < 80 || performance > 100)) show = false;
+                    if (performanceFilter === 'good' && (performance < 60 || performance >= 80)) show = false;
+                    if (performanceFilter === 'satisfactory' && (performance < 40 || performance >= 60)) show = false;
+                    if (performanceFilter === 'poor' && (performance < 0 || performance >= 40)) show = false;
+                }
+                
+                // Фильтр по попыткам
+                if (show && attemptsFilter !== 'all') {
+                    if (attemptsFilter === 'none' && attempts !== 0) show = false;
+                    if (attemptsFilter === '1-3' && (attempts < 1 || attempts > 3)) show = false;
+                    if (attemptsFilter === '4-10' && (attempts < 4 || attempts > 10)) show = false;
+                    if (attemptsFilter === '10+' && attempts <= 10) show = false;
+                }
+                
+                row.style.display = show ? 'table-row' : 'none';
+            });
+            
+            // Применяем сортировку после фильтрации
+            const sortBy = document.getElementById('sortBy').value;
+            sortStudents();
+        }
+        
+        // Функция сортировки студентов
+        function sortStudents() {
+            const sortBy = document.getElementById('sortBy').value;
+            
+            // Сортировка карточек студентов
+            const studentsContainer = document.getElementById('studentsList');
+            const studentCards = Array.from(document.querySelectorAll('.student-card'));
+            
+            studentCards.sort((a, b) => {
+                let aValue, bValue;
+                
+                switch(sortBy) {
+                    case 'name':
+                        aValue = a.getAttribute('data-name');
+                        bValue = b.getAttribute('data-name');
+                        return aValue.localeCompare(bValue);
+                    case 'performance':
+                        aValue = parseInt(a.getAttribute('data-performance'));
+                        bValue = parseInt(b.getAttribute('data-performance'));
+                        return bValue - aValue;
+                    case 'attempts':
+                        aValue = parseInt(a.getAttribute('data-attempts'));
+                        bValue = parseInt(b.getAttribute('data-attempts'));
+                        return bValue - aValue;
+                    case 'registration':
+                        aValue = parseInt(a.getAttribute('data-created'));
+                        bValue = parseInt(b.getAttribute('data-created'));
+                        return bValue - aValue;
+                    default:
+                        return 0;
+                }
+            });
+            
+            // Очищаем контейнер и добавляем отсортированные элементы
+            studentsContainer.innerHTML = '';
+            studentCards.forEach(card => {
+                studentsContainer.appendChild(card);
+            });
+            
+            // Сортировка таблицы
+            sortTable(sortBy, 'desc');
+        }
+        
+        // Функция сортировки таблицы
+        function sortTable(sortBy, direction) {
+            const tbody = document.querySelector('.data-table tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            rows.sort((a, b) => {
+                let aValue, bValue;
+                
+                switch(sortBy) {
+                    case 'name':
+                        aValue = a.getAttribute('data-name');
+                        bValue = b.getAttribute('data-name');
+                        return direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+                    case 'performance':
+                        aValue = parseInt(a.getAttribute('data-performance'));
+                        bValue = parseInt(b.getAttribute('data-performance'));
+                        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+                    case 'attempts':
+                        aValue = parseInt(a.getAttribute('data-attempts'));
+                        bValue = parseInt(b.getAttribute('data-attempts'));
+                        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+                    case 'registration':
+                        aValue = parseInt(a.getAttribute('data-created'));
+                        bValue = parseInt(b.getAttribute('data-created'));
+                        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+                    default:
+                        return 0;
+                }
+            });
+            
+            // Очищаем tbody и добавляем отсортированные строки
+            tbody.innerHTML = '';
+            rows.forEach(row => {
+                tbody.appendChild(row);
+            });
+        }
         
         // Анимация прогресс-баров
         document.addEventListener('DOMContentLoaded', function() {
@@ -1028,7 +1484,85 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                     bar.style.width = width;
                 }, 100);
             });
+            
+            // Инициализация графика
+            initPerformanceChart();
         });
+        
+        // Инициализация графика успеваемости
+        function initPerformanceChart() {
+            const ctx = document.getElementById('performanceChart').getContext('2d');
+            
+            // Подготовка данных для графика
+            const performanceData = [];
+            <?php foreach ($students as $student): ?>
+                <?php 
+                $performance = $student['total_points'] > 0 ? 
+                    round(($student['total_score'] / $student['total_points']) * 100, 1) : 0;
+                ?>
+                performanceData.push(<?php echo $performance; ?>);
+            <?php endforeach; ?>
+            
+            // Сортировка данных для лучшего отображения
+            performanceData.sort((a, b) => a - b);
+            
+            // Создание графика
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: performanceData.map((_, i) => `Студент ${i+1}`),
+                    datasets: [{
+                        label: 'Успеваемость (%)',
+                        data: performanceData,
+                        backgroundColor: performanceData.map(p => {
+                            if (p >= 80) return 'rgba(46, 204, 113, 0.7)';
+                            if (p >= 60) return 'rgba(52, 152, 219, 0.7)';
+                            if (p >= 40) return 'rgba(243, 156, 18, 0.7)';
+                            return 'rgba(231, 76, 60, 0.7)';
+                        }),
+                        borderColor: performanceData.map(p => {
+                            if (p >= 80) return 'rgba(46, 204, 113, 1)';
+                            if (p >= 60) return 'rgba(52, 152, 219, 1)';
+                            if (p >= 40) return 'rgba(243, 156, 18, 1)';
+                            return 'rgba(231, 76, 60, 1)';
+                        }),
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: {
+                                display: true,
+                                text: 'Успеваемость (%)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Студенты'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Успеваемость: ${context.raw}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
         
         // Модальное окно профиля студента
         const modal = document.getElementById('studentModal');
@@ -1040,6 +1574,29 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
             button.addEventListener('click', function() {
                 const studentId = this.getAttribute('data-id');
                 loadStudentProfile(studentId);
+            });
+        });
+        
+        // Обработчики для карточек студентов
+        document.querySelectorAll('.student-card').forEach(card => {
+            card.addEventListener('click', function() {
+                const studentId = this.querySelector('.view-profile')?.getAttribute('data-id');
+                if (studentId) {
+                    loadStudentProfile(studentId);
+                }
+            });
+        });
+        
+        // Обработчики для кнопок удаления
+        document.querySelectorAll('.delete-student').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const studentId = this.getAttribute('data-id');
+                const studentName = this.getAttribute('data-name');
+                
+                if (confirm(`Вы уверены, что хотите удалить студента "${studentName}"?`)) {
+                    deleteStudent(studentId, studentName);
+                }
             });
         });
         
@@ -1074,6 +1631,27 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                 });
         }
         
+        // Удаление студента
+        function deleteStudent(studentId, studentName) {
+            fetch(`students.php?action=delete_student&id=${studentId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification(`Студент "${studentName}" успешно удален`, 'success');
+                        // Обновляем страницу через секунду
+                        setTimeout(() => {
+                            location.reload();
+                        }, 1000);
+                    } else {
+                        showNotification(data.message || 'Ошибка удаления студента', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Ошибка:', error);
+                    showNotification('Ошибка удаления студента', 'error');
+                });
+        }
+        
         // Отрисовка профиля студента
         function renderStudentProfile(data) {
             const student = data.student;
@@ -1085,6 +1663,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                     const percentage = result.total_points > 0 ? 
                         Math.round((result.score / result.total_points) * 100) : 0;
                     const passed = result.passed ? 'Пройден' : 'Не пройден';
+                    const passedClass = result.passed ? 'test-score' : 'test-date';
                     
                     testResultsHTML += `
                         <div class="test-result-item">
@@ -1093,7 +1672,7 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                                 <div class="test-date">${new Date(result.completed_at).toLocaleDateString('ru-RU')}</div>
                             </div>
                             <div>
-                                <div class="test-score">${result.score}/${result.total_points} (${percentage}%)</div>
+                                <div class="${passedClass}">${result.score}/${result.total_points} (${percentage}%)</div>
                                 <div>${passed}</div>
                             </div>
                         </div>
@@ -1144,6 +1723,20 @@ if (isset($_GET['action']) && $_GET['action'] == 'get_student' && isset($_GET['i
                     </div>
                 </div>
             `;
+        }
+        
+        // Показ уведомлений
+        function showNotification(message, type = 'info') {
+            const notification = document.getElementById('notification');
+            const notificationText = document.getElementById('notificationText');
+            
+            notificationText.textContent = message;
+            notification.className = `notification notification-${type}`;
+            notification.classList.add('show');
+            
+            setTimeout(() => {
+                notification.classList.remove('show');
+            }, 3000);
         }
     </script>
 </body>
