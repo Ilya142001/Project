@@ -12,253 +12,6 @@ $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
-// Данные для GigaChat API
-$GIGA_CHAT_CLIENT_ID = "c33a9773-16da-4d9d-a268-21a3c149fa07";
-$GIGA_CHAT_AUTH_KEY = "YzMzYTk3NzMtMTZkYS00ZDlkLWEyNjgtMjFhM2MxNDlmYTA3OjQ4NzU4MTQxLWQ5MDYtNGEwYS04YmJlLTkxNWQ2MmFjMTRiNQ==";
-$GIGA_CHAT_SCOPE = "GIGACHAT_API_PERS";
-
-// Путь к сертификатам НУЦ Минцифры (замените на реальный путь)
-$RUSSIAN_TRUSTED_ROOT_CA = "C:\OSPanel\domains\Project\Cert\russian_trusted_root_ca.cer";
-$RUSSIAN_TRUSTED_SUB_CA = "C:\OSPanel\domains\Project\Cert\russian_trusted_root_ca_gost_2025.cer";
-
-// Функция для получения access token с поддержкой сертификатов
-function getGigaChatToken() {
-    global $GIGA_CHAT_CLIENT_ID, $GIGA_CHAT_AUTH_KEY, $GIGA_CHAT_SCOPE;
-    global $RUSSIAN_TRUSTED_ROOT_CA, $RUSSIAN_TRUSTED_SUB_CA;
-    
-    $url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth";
-    
-    $headers = [
-        "Authorization: Basic " . $GIGA_CHAT_AUTH_KEY,
-        "RqUID: " . uniqid(),
-        "Content-Type: application/x-www-form-urlencoded"
-    ];
-    
-    $data = "scope=" . $GIGA_CHAT_SCOPE;
-    
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    
-    // Настройки для работы с сертификатами НУЦ Минцифры
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-    
-    // Указываем пути к сертификатам
-    if (file_exists($RUSSIAN_TRUSTED_ROOT_CA) && file_exists($RUSSIAN_TRUSTED_SUB_CA)) {
-        curl_setopt($ch, CURLOPT_CAINFO, $RUSSIAN_TRUSTED_ROOT_CA);
-        curl_setopt($ch, CURLOPT_CAPATH, dirname($RUSSIAN_TRUSTED_ROOT_CA));
-    } else {
-        // Альтернативный вариант - использовать системные сертификаты
-        // если они уже установлены на уровне ОС
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-    }
-    
-    // Дополнительные настройки для отладки (можно убрать в продакшене)
-    curl_setopt($ch, CURLOPT_VERBOSE, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    
-    $response = curl_exec($ch);
-    
-    if (curl_errno($ch)) {
-        $error_msg = "Ошибка CURL: " . curl_error($ch);
-        curl_close($ch);
-        return $error_msg;
-    }
-    
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    if ($httpCode !== 200) {
-        return "Ошибка HTTP $httpCode: Не удалось получить токен доступа";
-    }
-    
-    $result = json_decode($response, true);
-    return $result['access_token'] ?? "Ошибка: Токен не найден в ответе";
-}
-
-// Альтернативная функция получения токена (если сертификаты не установлены)
-function getGigaChatTokenAlternative() {
-    global $GIGA_CHAT_CLIENT_ID, $GIGA_CHAT_AUTH_KEY, $GIGA_CHAT_SCOPE;
-    
-    $url = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth";
-    
-    $headers = [
-        "Authorization: Basic " . $GIGA_CHAT_AUTH_KEY,
-        "RqUID: " . uniqid(),
-        "Content-Type: application/x-www-form-urlencoded"
-    ];
-    
-    $data = "scope=" . $GIGA_CHAT_SCOPE;
-    
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    
-    // Отключаем проверку SSL (НЕ рекомендуется для продакшена!)
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    
-    $response = curl_exec($ch);
-    
-    if (curl_errno($ch)) {
-        $error_msg = "Ошибка CURL: " . curl_error($ch);
-        curl_close($ch);
-        return $error_msg;
-    }
-    
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
-    
-    if ($httpCode !== 200) {
-        return "Ошибка HTTP $httpCode: Не удалось получить токен доступа";
-    }
-    
-    $result = json_decode($response, true);
-    return $result['access_token'] ?? "Ошибка: Токен не найден в ответе";
-}
-
-// Функция для отправки сообщения в GigaChat
-function sendToGigaChat($message, $conversationHistory = []) {
-    // Пытаемся получить токен с проверкой сертификатов
-    $token = getGigaChatToken();
-    
-    // Если возникает ошибка с сертификатами, пробуем альтернативный метод
-    if (strpos($token, 'Ошибка') !== false || strpos($token, 'CURL') !== false) {
-        $token = getGigaChatTokenAlternative();
-    }
-    
-    // Если токен содержит текст ошибки, возвращаем его
-    if (strpos($token, 'Ошибка') === 0) {
-        return $token;
-    }
-    
-    if (!$token) return "Ошибка: Не удалось получить токен доступа";
-    
-    $url = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions";
-    
-    // Формируем историю сообщений
-    $messages = [];
-    
-    // Добавляем системное сообщение для контекста
-    $messages[] = [
-        "role" => "system",
-        "content" => "Ты - AI-ассистент в системе интеллектуальной оценки знаний. Ты помогаешь преподавателям и студентам с вопросами об образовании, тестировании и анализе результатов."
-    ];
-    
-    // Добавляем историю conversation
-    foreach ($conversationHistory as $msg) {
-        $messages[] = $msg;
-    }
-    
-    // Добавляем текущее сообщение пользователя
-    $messages[] = [
-        "role" => "user",
-        "content" => $message
-    ];
-    
-    $data = [
-        "model" => "GigaChat",
-        "messages" => $messages,
-        "temperature" => 0.7,
-        "max_tokens" => 1024
-    ];
-    
-    $headers = [
-        "Authorization: Bearer " . $token,
-        "Content-Type: application/json"
-    ];
-    
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $url);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    
-    // Настройки SSL для запроса к API
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // Временно отключаем для тестирования
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    $error = curl_error($ch);
-    curl_close($ch);
-    
-    if ($response === false) {
-        return "Ошибка CURL при отправке сообщения: " . $error;
-    }
-    
-    $result = json_decode($response, true);
-    
-    if ($httpCode !== 200) {
-        return "Ошибка HTTP $httpCode от GigaChat: " . json_encode($result);
-    }
-    
-    if (isset($result['choices'][0]['message']['content'])) {
-        return $result['choices'][0]['message']['content'];
-    } else {
-        return "Ошибка: Не удалось получить ответ от GigaChat. Ответ сервера: " . json_encode($result);
-    }
-}
-
-// Функция для проверки начала строки (аналог str_starts_with для старых версий PHP)
-function startsWith($haystack, $needle) {
-    return substr($haystack, 0, strlen($needle)) === $needle;
-}
-
-// Обработка очистки чата
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['clear_chat'])) {
-    $_SESSION['gigachat_history'] = [];
-    header("Location: ml_models.php");
-    exit;
-}
-
-// Обработка запроса к GigaChat
-$chatResponse = "";
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['chat_message'])) {
-    $userMessage = trim($_POST['chat_message']);
-    
-    if (!empty($userMessage)) {
-        // Получаем историю conversation из сессии
-        $conversationHistory = $_SESSION['gigachat_history'] ?? [];
-        
-        // Добавляем сообщение пользователя в историю
-        $conversationHistory[] = [
-            "role" => "user",
-            "content" => $userMessage
-        ];
-        
-        // Отправляем запрос к GigaChat
-        $chatResponse = sendToGigaChat($userMessage, $conversationHistory);
-        
-        // Добавляем ответ ассистента в историю
-        if (!startsWith($chatResponse, "Ошибка:")) {
-            $conversationHistory[] = [
-                "role" => "assistant",
-                "content" => $chatResponse
-            ];
-        }
-        
-        // Сохраняем обновленную историю в сессии (ограничиваем размер)
-        if (count($conversationHistory) > 10) {
-            $conversationHistory = array_slice($conversationHistory, -10);
-        }
-        $_SESSION['gigachat_history'] = $conversationHistory;
-    }
-}
-
 // Получаем список ML моделей
 $stmt = $pdo->prepare("SELECT * FROM ml_models ORDER BY created_at DESC");
 $stmt->execute();
@@ -273,6 +26,68 @@ $stmt = $pdo->prepare("
 ");
 $stmt->execute();
 $stats = $stmt->fetch();
+
+// Получаем данные для графиков (статистика по точности моделей за последние 6 месяцев)
+$stmt = $pdo->prepare("
+    SELECT 
+        DATE_FORMAT(created_at, '%Y-%m') as month,
+        COUNT(*) as model_count,
+        AVG(accuracy) as avg_accuracy
+    FROM ml_models 
+    WHERE created_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
+    GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+    ORDER BY month DESC
+    LIMIT 6
+");
+$stmt->execute();
+$monthlyStats = $stmt->fetchAll();
+
+// Подготовка данных для графика
+$chartLabels = [];
+$chartAccuracy = [];
+$chartCount = [];
+
+foreach ($monthlyStats as $stat) {
+    $chartLabels[] = date('M Y', strtotime($stat['month'] . '-01'));
+    $chartAccuracy[] = round($stat['avg_accuracy'] * 100, 1);
+    $chartCount[] = $stat['model_count'];
+}
+
+// Прогнозирование будущих показателей (простой линейный прогноз)
+$futurePredictions = [];
+if (count($chartAccuracy) >= 2) {
+    // Простой линейный прогноз на следующие 3 месяца
+    $lastAccuracy = $chartAccuracy[count($chartAccuracy)-1];
+    $prevAccuracy = $chartAccuracy[count($chartAccuracy)-2];
+    $trend = $lastAccuracy - $prevAccuracy;
+    
+    for ($i = 1; $i <= 3; $i++) {
+        $futureMonth = date('M Y', strtotime("+$i months"));
+        $predictedAccuracy = max(0, min(100, $lastAccuracy + ($trend * $i)));
+        $futurePredictions[] = [
+            'month' => $futureMonth,
+            'accuracy' => round($predictedAccuracy, 1)
+        ];
+    }
+}
+
+// Анализ производительности моделей
+$stmt = $pdo->prepare("
+    SELECT 
+        CASE 
+            WHEN accuracy >= 0.9 THEN 'Отличная'
+            WHEN accuracy >= 0.8 THEN 'Хорошая'
+            WHEN accuracy >= 0.7 THEN 'Удовлетворительная'
+            ELSE 'Низкая'
+        END as performance_category,
+        COUNT(*) as model_count,
+        AVG(accuracy) as avg_accuracy
+    FROM ml_models 
+    GROUP BY performance_category
+    ORDER BY avg_accuracy DESC
+");
+$stmt->execute();
+$performanceStats = $stmt->fetchAll();
 
 // Обработка добавления новой модели
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_model']) && $user['role'] == 'admin') {
@@ -321,6 +136,7 @@ if (isset($_GET['toggle']) && $user['role'] == 'admin') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ML модели - Система интеллектуальной оценки знаний</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Основные стили */
         * {
@@ -709,98 +525,101 @@ if (isset($_GET['toggle']) && $user['role'] == 'admin') {
             margin-right: 10px;
         }
         
-        /* Стили для чата GigaChat */
-        .chat-container {
+        /* Стили для графиков */
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .chart-card {
             background: white;
             border-radius: 10px;
             padding: 20px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            margin-bottom: 20px;
-            height: 500px;
-            display: flex;
-            flex-direction: column;
         }
         
-        .chat-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #eee;
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+            width: 100%;
         }
         
-        .chat-header h2 {
-            font-size: 18px;
-            color: var(--secondary);
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .performance-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
         }
         
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
-            padding: 10px;
-            margin-bottom: 15px;
-            background: var(--light);
+        .performance-item {
+            padding: 15px;
             border-radius: 8px;
+            text-align: center;
         }
         
-        .message {
-            margin-bottom: 15px;
-            padding: 10px 15px;
-            border-radius: 8px;
-            max-width: 80%;
+        .performance-excellent {
+            background: rgba(46, 204, 113, 0.1);
+            border-left: 4px solid var(--success);
         }
         
-        .message.user {
-            background: var(--primary);
-            color: white;
-            margin-left: auto;
+        .performance-good {
+            background: rgba(52, 152, 219, 0.1);
+            border-left: 4px solid var(--primary);
         }
         
-        .message.assistant {
-            background: #e3e3e3;
-            color: #333;
-            margin-right: auto;
+        .performance-satisfactory {
+            background: rgba(243, 156, 18, 0.1);
+            border-left: 4px solid var(--warning);
         }
         
-        .message.error {
+        .performance-low {
             background: rgba(231, 76, 60, 0.1);
-            color: var(--accent);
-            border-left: 3px solid var(--accent);
+            border-left: 4px solid var(--accent);
         }
         
-        .chat-input {
-            display: flex;
-            gap: 10px;
+        .performance-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 5px;
         }
         
-        .chat-input input {
-            flex: 1;
-            padding: 10px 15px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            outline: none;
+        .performance-label {
+            font-size: 14px;
+            color: var(--gray);
         }
         
-        .chat-input button {
-            padding: 10px 20px;
-            background: var(--primary);
+        .prediction-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
         }
         
-        .chat-input button:hover {
-            background: var(--primary-dark);
+        .prediction-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
         }
         
-        .clear-chat {
-            background: var(--accent) !important;
-            margin-left: 10px;
+        .prediction-header i {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+        
+        .prediction-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+        
+        .prediction-item {
+            text-align: center;
+            padding: 10px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 8px;
         }
         
         /* Form Styles */
@@ -930,23 +749,31 @@ if (isset($_GET['toggle']) && $user['role'] == 'admin') {
             .search-box input {
                 width: 100%;
             }
+            
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
         }
         
         @media (max-width: 768px) {
-            .chat-container {
-                height: 400px;
-            }
-            
-            .message {
-                max-width: 90%;
-            }
-            
             .model-list {
                 grid-template-columns: 1fr;
             }
             
             .stats-cards {
                 grid-template-columns: 1fr;
+            }
+            
+            .charts-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-card {
+                padding: 15px;
+            }
+            
+            .chart-wrapper {
+                height: 250px;
             }
         }
     </style>
@@ -1028,41 +855,60 @@ if (isset($_GET['toggle']) && $user['role'] == 'admin') {
         </div>
         <?php endif; ?>
         
-        <!-- Чат с GigaChat -->
-        <div class="chat-container">
-            <div class="chat-header">
-                <h2><i class="fas fa-comments"></i> AI-ассистент GigaChat</h2>
-                <form method="POST" style="display: inline;">
-                    <button type="submit" name="clear_chat" class="btn btn-danger clear-chat">Очистить чат</button>
-                </form>
+        <!-- Графики и аналитика -->
+        <div class="charts-container">
+            <div class="chart-card">
+                <div class="section-header">
+                    <h2><i class="fas fa-chart-line"></i> Динамика точности моделей</h2>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="accuracyChart"></canvas>
+                </div>
             </div>
             
-            <div class="chat-messages" id="chatMessages">
-                <?php
-                // Показываем историю переписки
-                $conversationHistory = $_SESSION['gigachat_history'] ?? [];
-                foreach ($conversationHistory as $message) {
-                    $class = $message['role'] == 'user' ? 'user' : 'assistant';
-                    $icon = $message['role'] == 'user' ? 'fas fa-user' : 'fas fa-robot';
-                    echo '<div class="message ' . $class . '">';
-                    echo '<div><i class="' . $icon . '"></i> ' . nl2br(htmlspecialchars($message['content'])) . '</div>';
-                    echo '</div>';
-                }
-                
-                // Показываем последний ответ, если есть
-                if (!empty($chatResponse)) {
-                    $class = startsWith($chatResponse, "Ошибка:") ? 'assistant error' : 'assistant';
-                    echo '<div class="message ' . $class . '">';
-                    echo '<div><i class="fas fa-robot"></i> ' . nl2br(htmlspecialchars($chatResponse)) . '</div>';
-                    echo '</div>';
-                }
-                ?>
+            <div class="chart-card">
+                <div class="section-header">
+                    <h2><i class="fas fa-chart-bar"></i> Количество моделей по месяцам</h2>
+                </div>
+                <div class="chart-wrapper">
+                    <canvas id="countChart"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Прогноз будущих показателей -->
+        <?php if (!empty($futurePredictions)): ?>
+        <div class="prediction-card">
+            <div class="prediction-header">
+                <i class="fas fa-crystal-ball"></i>
+                <h3>Прогноз точности на будущие месяцы</h3>
+            </div>
+            <div class="prediction-list">
+                <?php foreach ($futurePredictions as $prediction): ?>
+                <div class="prediction-item">
+                    <div class="performance-value"><?php echo $prediction['accuracy']; ?>%</div>
+                    <div class="performance-label"><?php echo $prediction['month']; ?></div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+        
+        <!-- Анализ производительности -->
+        <div class="section">
+            <div class="section-header">
+                <h2><i class="fas fa-analytics"></i> Анализ производительности моделей</h2>
             </div>
             
-            <form method="POST" class="chat-input">
-                <input type="text" name="chat_message" placeholder="Задайте вопрос о системе, моделях или анализе данных..." required>
-                <button type="submit"><i class="fas fa-paper-plane"></i> Отправить</button>
-            </form>
+            <div class="performance-stats">
+                <?php foreach ($performanceStats as $stat): ?>
+                <div class="performance-item performance-<?php echo strtolower($stat['performance_category']); ?>">
+                    <div class="performance-value"><?php echo $stat['model_count']; ?></div>
+                    <div class="performance-label"><?php echo $stat['performance_category']; ?> точность</div>
+                    <div class="performance-value"><?php echo round($stat['avg_accuracy'] * 100, 1); ?>%</div>
+                </div>
+                <?php endforeach; ?>
+            </div>
         </div>
         
         <!-- Статистика -->
@@ -1231,11 +1077,136 @@ if (isset($_GET['toggle']) && $user['role'] == 'admin') {
             });
         });
         
-        // Автопрокрутка чата вниз
-        var chatMessages = document.getElementById('chatMessages');
-        if (chatMessages) {
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-    </script>
-</body>
-</html>
+        // Инициализация графиков
+        document.addEventListener('DOMContentLoaded', function() {
+            // График точности
+            var accuracyCtx = document.getElementById('accuracyChart').getContext('2d');
+            var accuracyChart = new Chart(accuracyCtx, {
+                type: 'line',
+                data: {
+                    labels: <?php echo json_encode(array_reverse($chartLabels)); ?>,
+                    datasets: [{
+                        label: 'Средняя точность (%)',
+                        data: <?php echo json_encode(array_reverse($chartAccuracy)); ?>,
+                        borderColor: '#3498db',
+                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                                }]
+                        },
+                        options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                        legend: {
+                        display: true,
+                        position: 'top'
+                                },
+                        tooltip: {
+                        mode: 'index',
+                        intersect: false
+                                }
+                                 },
+                        scales: {
+                        y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                        callback: function(value) {
+                        return value + '%';
+                                                 }
+                                }
+                                }
+                                }
+                                }
+                                });
+                                        // График количества моделей
+        var countCtx = document.getElementById('countChart').getContext('2d');
+        var countChart = new Chart(countCtx, {
+            type: 'bar',
+            data: {
+                labels: <?php echo json_encode(array_reverse($chartLabels)); ?>,
+                datasets: [{
+                    label: 'Количество моделей',
+                    data: <?php echo json_encode(array_reverse($chartCount)); ?>,
+                    backgroundColor: 'rgba(46, 204, 113, 0.7)',
+                    borderColor: 'rgba(46, 204, 113, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+
+        // Анимация появления элементов
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
+
+        // Применяем анимацию к карточкам моделей
+        document.querySelectorAll('.model-item').forEach((item, index) => {
+            item.style.opacity = '0';
+            item.style.transform = 'translateY(20px)';
+            item.style.transition = `opacity 0.5s ease ${index * 0.1}s, transform 0.5s ease ${index * 0.1}s`;
+            observer.observe(item);
+        });
+
+        // Применяем анимацию к статистическим карточкам
+        document.querySelectorAll('.stat-card').forEach((card, index) => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(20px)';
+            card.style.transition = `opacity 0.5s ease ${index * 0.1}s, transform 0.5s ease ${index * 0.1}s`;
+            observer.observe(card);
+        });
+    });
+
+    // Функция для подтверждения действий
+    function confirmAction(message) {
+        return confirm(message);
+    }
+
+    // Добавляем подтверждение для активации/деактивации моделей
+    document.addEventListener('DOMContentLoaded', function() {
+        const toggleLinks = document.querySelectorAll('a[href*="toggle=1"]');
+        toggleLinks.forEach(link => {
+            link.addEventListener('click', function(e) {
+                const isActive = this.classList.contains('btn-success');
+                const message = isActive 
+                    ? 'Вы уверены, что хотите активировать эту модель?' 
+                    : 'Вы уверены, что хотите деактивировать эту модель?';
+                
+                if (!confirmAction(message)) {
+                    e.preventDefault();
+                }
+            });
+        });
+    });
+</script>
+</body> </html>
