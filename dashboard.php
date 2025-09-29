@@ -149,6 +149,7 @@ if ($user['role'] == 'student') {
             position: fixed;
             padding: 20px 0;
             overflow-y: auto;
+            z-index: 1000;
         }
         
         .logo {
@@ -391,6 +392,7 @@ if ($user['role'] == 'student') {
             background: var(--light);
             border-radius: 8px;
             transition: transform 0.2s;
+            cursor: pointer;
         }
         
         .test-item:hover {
@@ -511,12 +513,91 @@ if ($user['role'] == 'student') {
         .activity-table tr:hover {
             background-color: #f9f9f9;
         }
+        
         .user-avatar img {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-}
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+        
+        /* Модальное окно */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 2000;
+        }
+        
+        .modal-overlay.active {
+            display: block;
+        }
+        
+        .modal-content {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 95%;
+            max-width: 1200px;
+            height: 90vh;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            z-index: 2001;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 25px;
+            background: var(--secondary);
+            color: white;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .modal-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.3s;
+        }
+        
+        .modal-close:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .modal-body {
+            height: calc(100% - 70px);
+            overflow: auto;
+            padding: 0;
+        }
+        
+        .modal-body iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
         /* Responsive */
         @media (max-width: 992px) {
             .sidebar {
@@ -572,6 +653,11 @@ if ($user['role'] == 'student') {
                 display: block;
                 overflow-x: auto;
             }
+            
+            .modal-content {
+                width: 98%;
+                height: 95vh;
+            }
         }
     </style>
 </head>
@@ -583,44 +669,44 @@ if ($user['role'] == 'student') {
         </div>
         
         <div class="user-info">
-    <div class="user-avatar">
-        <?php 
-        $avatarPath = !empty($user['avatar']) ? $user['avatar'] : '1.jpg';
-        
-        // Проверяем, существует ли файл
-        if (file_exists($avatarPath)) {
-            echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
-        } else {
-            // Если файл не существует, показываем первую букву имени
-            $firstName = $user['full_name'];
-            // Преобразуем в UTF-8 на случай проблем с кодировкой
-            if (function_exists('mb_convert_encoding')) {
-                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
-            }
-            $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
-            echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
-        }
-        ?>
-    </div>
-    <div class="user-details">
-        <h3>Привет, <?php 
-            $nameParts = explode(' ', $user['full_name']);
-            $firstName = $nameParts[1];
-            if (function_exists('mb_convert_encoding')) {
-                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
-            }
-            echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
-        ?></h3>
-        <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
-        <span class="role-badge role-<?php echo $user['role']; ?>">
-            <?php 
-            if ($user['role'] == 'admin') echo 'Администратор';
-            else if ($user['role'] == 'teacher') echo 'Преподаватель';
-            else echo 'Студент';
-            ?>
-        </span>
-    </div>
-</div>
+            <div class="user-avatar">
+                <?php 
+                $avatarPath = !empty($user['avatar']) ? $user['avatar'] : '1.jpg';
+                
+                // Проверяем, существует ли файл
+                if (file_exists($avatarPath)) {
+                    echo '<img src="' . $avatarPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
+                } else {
+                    // Если файл не существует, показываем первую букву имени
+                    $firstName = $user['full_name'];
+                    // Преобразуем в UTF-8 на случай проблем с кодировкой
+                    if (function_exists('mb_convert_encoding')) {
+                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                    }
+                    $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+                    echo htmlspecialchars(strtoupper($firstLetter), ENT_QUOTES, 'UTF-8');
+                }
+                ?>
+            </div>
+            <div class="user-details">
+                <h3>Привет, <?php 
+                    $nameParts = explode(' ', $user['full_name']);
+                    $firstName = $nameParts[1];
+                    if (function_exists('mb_convert_encoding')) {
+                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                    }
+                    echo htmlspecialchars($firstName, ENT_QUOTES, 'UTF-8'); 
+                ?></h3>
+                <p><?php echo htmlspecialchars($user['email'], ENT_QUOTES, 'UTF-8'); ?></p>
+                <span class="role-badge role-<?php echo $user['role']; ?>">
+                    <?php 
+                    if ($user['role'] == 'admin') echo 'Администратор';
+                    else if ($user['role'] == 'teacher') echo 'Преподаватель';
+                    else echo 'Студент';
+                    ?>
+                </span>
+            </div>
+        </div>
         
         <ul class="nav-links">
             <li><a href="dashboard.php" class="active"><i class="fas fa-th-large"></i> <span>Главная</span></a></li>
@@ -641,20 +727,20 @@ if ($user['role'] == 'student') {
             <div class="welcome">
                 <h2>Система интеллектуальной оценки знаний</h2>
                 <?php
-$words = explode(' ', $user['full_name']);
-$second_word = $words[1] ?? '';
-$third_word = $words[2] ?? '';
+                $words = explode(' ', $user['full_name']);
+                $second_word = $words[1] ?? '';
+                $third_word = $words[2] ?? '';
 
-echo "<p>Добро пожаловать. $second_word $third_word</p>";
-?>
+                echo "<p>Добро пожаловать. $second_word $third_word</p>";
+                ?>
             </div>
             
             <div class="search-box">
-    <form method="GET" action="search.php">
-        <i class="fas fa-search"></i>
-        <input type="text" name="q" placeholder="Поиск..." value="<?php echo isset($_GET['q']) ? htmlspecialchars($_GET['q']) : ''; ?>">
-    </form>
-</div>
+                <form method="GET" action="search.php">
+                    <i class="fas fa-search"></i>
+                    <input type="text" name="q" placeholder="Поиск..." value="<?php echo isset($_GET['q']) ? htmlspecialchars($_GET['q']) : ''; ?>">
+                </form>
+            </div>
         </div>
         
         <div class="stats-cards">
@@ -686,8 +772,8 @@ echo "<p>Добро пожаловать. $second_word $third_word</p>";
                     <div class="stat-details">
                         <h3><?php echo $stats['total_points'] > 0 ? round(($stats['total_score'] / $stats['total_points']) * 100, 1) : 0; ?>%</h3>
                         <div style="background: #ecf0f1; height: 5px; border-radius: 3px; margin-top: 5px;">
-    <div style="height: 100%; border-radius: 3px; background: var(--success); width: <?php echo $stats['total_points'] > 0 ? round(($stats['total_score'] / $stats['total_points']) * 100, 1) : 0; ?>%;"></div>
-</div>
+                            <div style="height: 100%; border-radius: 3px; background: var(--success); width: <?php echo $stats['total_points'] > 0 ? round(($stats['total_score'] / $stats['total_points']) * 100, 1) : 0; ?>%;"></div>
+                        </div>
                         <p>Средний результат</p>
                     </div>
                 </div>
@@ -757,11 +843,11 @@ echo "<p>Добро пожаловать. $second_word $third_word</p>";
                             </div>
                         <?php endforeach; ?>
                     <?php else: ?>
-    <div style="text-align: center; padding: 30px; color: var(--gray);">
-        <i class="fas fa-inbox" style="font-size: 50px; margin-bottom: 15px; opacity: 0.5;"></i>
-        <p>Пока нет доступных тестов. Обратитесь к преподавателю.</p>
-    </div>
-<?php endif; ?>
+                        <div style="text-align: center; padding: 30px; color: var(--gray);">
+                            <i class="fas fa-inbox" style="font-size: 50px; margin-bottom: 15px; opacity: 0.5;"></i>
+                            <p>Пока нет доступных тестов. Обратитесь к преподавателю.</p>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
             
@@ -809,7 +895,7 @@ echo "<p>Добро пожаловать. $second_word $third_word</p>";
                                     <span>Дата: <?php echo date('d.m.Y', strtotime($test['created_at'])); ?></span>
                                 </div>
                                 <div class="test-actions">
-                                    <a href="test_edit.php?id=<?php echo $test['id']; ?>" class="btn btn-primary">Управление</a>
+                                    <button class="btn btn-primary manage-test-btn" data-test-id="<?php echo $test['id']; ?>">Управление</button>
                                 </div>
                             </div>
                         <?php endforeach; ?>
@@ -880,12 +966,78 @@ echo "<p>Добро пожаловать. $second_word $third_word</p>";
         <?php endif; ?>
     </div>
 
+    <!-- Модальное окно для управления тестом -->
+    <div class="modal-overlay" id="testModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Управление тестом</h2>
+                <button class="modal-close" id="modalClose">&times;</button>
+            </div>
+            <div class="modal-body">
+                <iframe id="testIframe" src="" frameborder="0"></iframe>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // Простая интерактивность
+        // Простая интерактивность для студентов
         document.querySelectorAll('.test-item').forEach(item => {
             item.addEventListener('click', function(e) {
                 if (!e.target.classList.contains('btn')) {
-                    this.querySelector('a.btn').click();
+                    const link = this.querySelector('a.btn');
+                    if (link) link.click();
+                }
+            });
+        });
+
+        // Управление модальным окном для преподавателей
+        document.addEventListener('DOMContentLoaded', function() {
+            const modal = document.getElementById('testModal');
+            const modalClose = document.getElementById('modalClose');
+            const testIframe = document.getElementById('testIframe');
+            const manageTestBtns = document.querySelectorAll('.manage-test-btn');
+            
+            // Открытие модального окна
+            manageTestBtns.forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const testId = this.getAttribute('data-test-id');
+                    testIframe.src = `test_edit.php?id=${testId}`;
+                    modal.classList.add('active');
+                });
+            });
+            
+            // Закрытие модального окна
+            modalClose.addEventListener('click', function() {
+                closeModal();
+            });
+            
+            // Закрытие по клику вне модального окна
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+            
+            // Закрытие по ESC
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal.classList.contains('active')) {
+                    closeModal();
+                }
+            });
+            
+            function closeModal() {
+                modal.classList.remove('active');
+                // Очищаем iframe после закрытия
+                setTimeout(() => {
+                    testIframe.src = '';
+                }, 300);
+            }
+            
+            // Обработка сообщений от iframe для закрытия модального окна
+            window.addEventListener('message', function(e) {
+                if (e.data === 'closeModal') {
+                    closeModal();
                 }
             });
         });

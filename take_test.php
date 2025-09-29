@@ -74,14 +74,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user_answer = $_POST['question_' . $question['id']] ?? '';
             
             // Инициализируем переменные
-            $is_correct = 0; // Всегда целое число
+            $is_correct = 0;
             $points_earned = 0;
             $answer_text = '';
 
             if ($question['question_type'] === 'text') {
                 // Для текстовых вопросов
                 $answer_text = trim($user_answer);
-                $is_correct = 0; // Для текстовых всегда 0 (не проверяем автоматически)
+                $is_correct = 0;
                 $points_earned = 0;
             } else {
                 // Для вопросов с множественным выбором
@@ -116,8 +116,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         // Обновляем общий результат
         $percentage = $total_points > 0 ? round(($score / $total_points) * 100, 2) : 0;
-        $passed = $percentage >= 70; // 70% для прохождения
-        
+        $passed = $percentage >= 70;
+
         $stmt = $pdo->prepare("UPDATE test_results SET score = ?, total_points = ?, percentage = ?, passed = ?, end_time = ? WHERE id = ?");
         $stmt->execute([$score, $total_points, $percentage, (int)$passed, date('Y-m-d H:i:s'), $result_id]);
         
@@ -149,15 +149,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         :root {
-            --primary: #3498db;
-            --primary-dark: #2980b9;
-            --secondary: #2c3e50;
-            --accent: #e74c3c;
-            --light: #f5f7fa;
-            --gray: #7f8c8d;
-            --success: #2ecc71;
-            --warning: #f39c12;
-            --danger: #e74c3c;
+            --primary: #4361ee;
+            --primary-dark: #3a56d4;
+            --secondary: #7209b7;
+            --accent: #f72585;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --success: #4cc9f0;
+            --warning: #f8961e;
+            --danger: #e63946;
+            --dark: #212529;
+            --card-bg: #ffffff;
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
         
         body {
@@ -167,125 +171,227 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: flex;
             align-items: center;
             justify-content: center;
+            line-height: 1.6;
         }
         
         .test-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            background: var(--card-bg);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             overflow: hidden;
+            transition: var(--transition);
+        }
+        
+        .test-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
         }
         
         .test-header {
-            background: var(--secondary);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
-            padding: 25px;
+            padding: 30px;
             position: relative;
+            overflow: hidden;
+        }
+        
+        .test-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 150px;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            transform: translate(40%, -40%);
+        }
+        
+        .test-header::after {
+            content: '';
+            position: absolute;
+            bottom: -30px;
+            left: -30px;
+            width: 100px;
+            height: 100px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
         }
         
         .test-title {
-            font-size: 24px;
-            font-weight: 600;
+            font-size: 28px;
+            font-weight: 700;
             margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .test-description {
+            font-size: 16px;
+            opacity: 0.9;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+            line-height: 1.5;
         }
         
         .test-meta {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-top: 15px;
-            font-size: 14px;
+            margin-top: 20px;
+            font-size: 15px;
             opacity: 0.9;
+            position: relative;
+            z-index: 1;
+            flex-wrap: wrap;
+            gap: 15px;
         }
         
         .timer {
             background: rgba(255, 255, 255, 0.2);
-            padding: 8px 15px;
-            border-radius: 20px;
+            padding: 10px 20px;
+            border-radius: 25px;
             font-weight: 600;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
         }
         
         .timer.warning {
             background: var(--warning);
             color: white;
+            animation: pulse 1.5s infinite;
         }
         
         .timer.danger {
             background: var(--danger);
             color: white;
-            animation: pulse 1s infinite;
+            animation: pulse 0.8s infinite;
         }
         
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
         }
         
         .progress-container {
             background: rgba(255, 255, 255, 0.2);
-            height: 6px;
-            border-radius: 3px;
-            margin-top: 15px;
+            height: 8px;
+            border-radius: 4px;
+            margin-top: 20px;
             overflow: hidden;
+            position: relative;
+            z-index: 1;
         }
         
         .progress-bar {
             height: 100%;
-            background: var(--primary);
-            border-radius: 3px;
-            transition: width 0.3s ease;
+            background: linear-gradient(90deg, var(--success) 0%, #4cc9f0 100%);
+            border-radius: 4px;
+            transition: width 0.5s ease;
             width: 0%;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
         }
         
         .test-content {
             padding: 30px;
-            max-height: 60vh;
+            max-height: 65vh;
             overflow-y: auto;
         }
         
         .question {
             margin-bottom: 30px;
-            padding: 20px;
+            padding: 25px;
             background: var(--light);
-            border-radius: 15px;
-            border-left: 4px solid var(--primary);
+            border-radius: 20px;
+            border-left: 5px solid var(--primary);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .question::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            transform: scaleX(0);
+            transition: transform 0.5s ease;
+        }
+        
+        .question.active::before {
+            transform: scaleX(1);
+        }
+        
+        .question:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
         }
         
         .question-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
+            gap: 15px;
         }
         
         .question-text {
             font-size: 18px;
-            font-weight: 500;
-            color: var(--secondary);
+            font-weight: 600;
+            color: var(--dark);
             flex: 1;
+            line-height: 1.5;
         }
         
         .question-points {
-            background: var(--primary);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
-            padding: 5px 12px;
-            border-radius: 15px;
+            padding: 8px 16px;
+            border-radius: 20px;
             font-size: 14px;
             font-weight: 600;
-            margin-left: 15px;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(67, 97, 238, 0.3);
         }
         
         .options-container {
-            margin-top: 15px;
+            margin-top: 20px;
         }
         
         .option {
-            margin-bottom: 12px;
+            margin-bottom: 15px;
+            transition: var(--transition);
+        }
+        
+        .option:hover {
+            transform: translateX(5px);
         }
         
         .option input[type="radio"],
@@ -294,139 +400,245 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .option label {
-            display: block;
-            padding: 15px;
+            display: flex;
+            align-items: center;
+            padding: 18px 20px;
             background: white;
-            border: 2px solid #e0e0e0;
-            border-radius: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             font-size: 16px;
+            gap: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .option label::before {
+            content: '';
+            width: 20px;
+            height: 20px;
+            border: 2px solid #dee2e6;
+            border-radius: 50%;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+        
+        .option input[type="checkbox"] + label::before {
+            border-radius: 5px;
         }
         
         .option label:hover {
             border-color: var(--primary);
-            background: rgba(52, 152, 219, 0.05);
+            background: rgba(67, 97, 238, 0.03);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08);
         }
         
         .option input[type="radio"]:checked + label,
         .option input[type="checkbox"]:checked + label {
             border-color: var(--primary);
-            background: rgba(52, 152, 219, 0.1);
-            font-weight: 500;
+            background: rgba(67, 97, 238, 0.08);
+            font-weight: 600;
+        }
+        
+        .option input[type="radio"]:checked + label::before {
+            border-color: var(--primary);
+            background: var(--primary);
+            box-shadow: inset 0 0 0 3px white;
+        }
+        
+        .option input[type="checkbox"]:checked + label::before {
+            border-color: var(--primary);
+            background: var(--primary);
+            box-shadow: inset 0 0 0 2px white;
         }
         
         .text-answer {
             width: 100%;
-            padding: 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 12px;
+            padding: 18px 20px;
+            border: 2px solid #e9ecef;
+            border-radius: 15px;
             font-size: 16px;
             resize: vertical;
-            min-height: 100px;
-            transition: border-color 0.3s ease;
+            min-height: 120px;
+            transition: var(--transition);
+            font-family: inherit;
+            line-height: 1.5;
         }
         
         .text-answer:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+            box-shadow: 0 0 0 4px rgba(67, 97, 238, 0.1);
+            transform: translateY(-2px);
         }
         
         .test-footer {
-            padding: 25px;
+            padding: 25px 30px;
             background: #f8f9fa;
             border-top: 1px solid #e9ecef;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            gap: 20px;
         }
         
         .navigation-buttons {
             display: flex;
-            gap: 10px;
+            gap: 12px;
         }
         
         .btn {
-            padding: 12px 25px;
+            padding: 14px 28px;
             border: none;
-            border-radius: 10px;
+            border-radius: 12px;
             font-size: 16px;
-            font-weight: 500;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: var(--transition);
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn:hover::before {
+            left: 100%;
         }
         
         .btn-primary {
-            background: var(--primary);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: white;
+            box-shadow: 0 4px 15px rgba(67, 97, 238, 0.3);
         }
         
         .btn-primary:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(67, 97, 238, 0.4);
         }
         
         .btn-secondary {
             background: var(--gray);
             color: white;
+            box-shadow: 0 4px 15px rgba(108, 117, 125, 0.3);
         }
         
         .btn-secondary:hover {
-            background: #6c757d;
+            background: #5a6268;
+            transform: translateY(-3px);
         }
         
         .btn-success {
-            background: var(--success);
+            background: linear-gradient(135deg, var(--success) 0%, #3a86ff 100%);
             color: white;
+            box-shadow: 0 4px 15px rgba(76, 201, 240, 0.3);
         }
         
         .btn-success:hover {
-            background: #27ae60;
-            transform: translateY(-2px);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(76, 201, 240, 0.4);
         }
         
         .question-counter {
-            font-size: 14px;
+            font-size: 15px;
             color: var(--gray);
             font-weight: 500;
+            background: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
         
         .error-message {
-            background: #fee;
+            background: #ffe6e6;
             color: var(--danger);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+            padding: 18px 20px;
+            border-radius: 12px;
+            margin: 20px 30px;
             border-left: 4px solid var(--danger);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 12px rgba(230, 57, 70, 0.1);
+        }
+        
+        .question-navigation {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .nav-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #dee2e6;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .nav-dot.active {
+            background: var(--primary);
+            transform: scale(1.2);
+        }
+        
+        .nav-dot.answered {
+            background: var(--success);
         }
         
         @media (max-width: 768px) {
             body {
                 padding: 10px;
+                align-items: flex-start;
             }
             
             .test-container {
-                border-radius: 15px;
+                border-radius: 20px;
             }
             
             .test-header {
-                padding: 20px;
+                padding: 25px 20px;
+            }
+            
+            .test-title {
+                font-size: 24px;
             }
             
             .test-content {
                 padding: 20px;
+                max-height: none;
             }
             
             .question {
-                padding: 15px;
+                padding: 20px;
+            }
+            
+            .question-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+            
+            .question-points {
+                align-self: flex-start;
             }
             
             .question-text {
-                font-size: 16px;
+                font-size: 17px;
             }
             
             .test-footer {
@@ -441,9 +653,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             .btn {
-                padding: 10px 20px;
-                font-size: 14px;
+                padding: 12px 20px;
+                font-size: 15px;
             }
+            
+            .test-meta {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+        }
+        
+        /* Специальные стили для разных типов вопросов */
+        .multiple-choice .option label {
+            padding-left: 50px;
+        }
+        
+        .multiple-choice .option label::before {
+            position: absolute;
+            left: 20px;
+        }
+        
+        .text-question .text-answer {
+            font-size: 16px;
+        }
+        
+        /* Анимация появления вопросов */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .question {
+            animation: fadeIn 0.5s ease forwards;
         }
     </style>
 </head>
@@ -451,11 +693,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="test-container">
         <div class="test-header">
             <h1 class="test-title"><?php echo htmlspecialchars($test['title']); ?></h1>
-            <p><?php echo htmlspecialchars($test['description']); ?></p>
+            <p class="test-description"><?php echo htmlspecialchars($test['description']); ?></p>
             
             <div class="test-meta">
                 <div>
-                    <span>Время на тест: <?php echo $test['time_limit']; ?> минут</span>
+                    <span><i class="fas fa-clock"></i> Время на тест: <?php echo $test['time_limit']; ?> минут</span>
                 </div>
                 <div class="timer" id="timer">
                     <i class="fas fa-clock"></i>
@@ -465,6 +707,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             <div class="progress-container">
                 <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            
+            <div class="question-navigation" id="question-dots">
+                <?php for ($i = 0; $i < count($questions); $i++): ?>
+                    <div class="nav-dot" data-index="<?php echo $i; ?>"></div>
+                <?php endfor; ?>
             </div>
         </div>
         
@@ -478,13 +726,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <form id="test-form" method="POST" action="take_test.php?id=<?php echo $test_id; ?>">
             <div class="test-content">
                 <?php foreach ($questions as $index => $question): ?>
-                    <div class="question" id="question-<?php echo $question['id']; ?>">
+                    <div class="question <?php echo $question['question_type'] === 'text' ? 'text-question' : 'multiple-choice'; ?>" 
+                         id="question-<?php echo $question['id']; ?>" data-index="<?php echo $index; ?>">
                         <div class="question-header">
                             <div class="question-text">
-                                Вопрос <?php echo $index + 1; ?>: <?php echo htmlspecialchars($question['question_text']); ?>
+                                <span class="question-number">Вопрос <?php echo $index + 1; ?></span>: 
+                                <?php echo htmlspecialchars($question['question_text']); ?>
                             </div>
                             <div class="question-points">
-                                <?php echo $question['points']; ?> баллов
+                                <i class="fas fa-star"></i> <?php echo $question['points']; ?> баллов
                             </div>
                         </div>
                         
@@ -502,7 +752,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 
                             <?php elseif ($question['question_type'] === 'text'): ?>
                                 <textarea class="text-answer" name="question_<?php echo $question['id']; ?>" 
-                                          placeholder="Введите ваш ответ здесь..."></textarea>
+                                          placeholder="Введите ваш развернутый ответ здесь..."></textarea>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -511,7 +761,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             <div class="test-footer">
                 <div class="question-counter">
-                    Вопрос <span id="current-question">1</span> из <?php echo count($questions); ?>
+                    <span id="current-question">1</span> из <?php echo count($questions); ?> вопросов
                 </div>
                 
                 <div class="navigation-buttons">
@@ -523,7 +773,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         Далее <i class="fas fa-arrow-right"></i>
                     </button>
                     
-                    <button type="submit" class="btn btn-success" id="submit-btn" style="display: none;">
+                    <button type="submit" class="btn btn-success" id="submit-btn">
                         <i class="fas fa-paper-plane"></i> Завершить тест
                     </button>
                 </div>
@@ -535,37 +785,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Переменные для управления тестом
         const questions = document.querySelectorAll('.question');
         const totalQuestions = questions.length;
+        const questionDots = document.querySelectorAll('.nav-dot');
         let currentQuestion = 0;
-        let timeRemaining = <?php echo $test['time_limit'] * 60; ?>; // в секундах
+        let timeRemaining = <?php echo $test['time_limit'] * 60; ?>;
         let timerInterval;
+        let answers = {};
 
         // Инициализация теста
         function initTest() {
-            // Показываем только первый вопрос
             showQuestion(0);
-            
-            // Запускаем таймер
             startTimer();
-            
-            // Обновляем прогресс
             updateProgress();
+            updateNavigationDots();
+            
+            // Инициализация отслеживания ответов
+            initAnswerTracking();
         }
 
         // Показать вопрос
         function showQuestion(index) {
-            // Скрываем все вопросы
-            questions.forEach(q => q.style.display = 'none');
+            questions.forEach(q => {
+                q.style.display = 'none';
+                q.classList.remove('active');
+            });
             
-            // Показываем текущий вопрос
             questions[index].style.display = 'block';
+            setTimeout(() => questions[index].classList.add('active'), 50);
             
-            // Обновляем счетчик
             document.getElementById('current-question').textContent = index + 1;
             
-            // Управляем видимостью кнопок
+            // Управление видимостью кнопок
             document.getElementById('prev-btn').style.display = index === 0 ? 'none' : 'flex';
             document.getElementById('next-btn').style.display = index === totalQuestions - 1 ? 'none' : 'flex';
             document.getElementById('submit-btn').style.display = index === totalQuestions - 1 ? 'flex' : 'none';
+            
+            // Обновление навигационных точек
+            updateNavigationDots();
         }
 
         // Следующий вопрос
@@ -592,6 +847,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             document.getElementById('progress-bar').style.width = progress + '%';
         }
 
+        // Обновление навигационных точек
+        function updateNavigationDots() {
+            questionDots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentQuestion);
+                const questionId = questions[index].id.replace('question-', '');
+                dot.classList.toggle('answered', answers[questionId]);
+            });
+        }
+
+        // Инициализация отслеживания ответов
+        function initAnswerTracking() {
+            // Отслеживание изменений в ответах
+            document.querySelectorAll('input[type="checkbox"], input[type="radio"], textarea').forEach(element => {
+                element.addEventListener('change', function() {
+                    const questionId = this.name.replace('question_', '');
+                    answers[questionId] = true;
+                    updateNavigationDots();
+                });
+            });
+            
+            // Быстрая навигация по точкам
+            questionDots.forEach((dot, index) => {
+                dot.addEventListener('click', () => {
+                    currentQuestion = index;
+                    showQuestion(currentQuestion);
+                    updateProgress();
+                });
+            });
+        }
+
         // Таймер обратного отсчета
         function startTimer() {
             updateTimerDisplay();
@@ -608,6 +893,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 // Изменяем цвет таймера при малом остатке времени
                 const timer = document.getElementById('timer');
+                timer.classList.remove('warning', 'danger');
+                
                 if (timeRemaining <= 60) {
                     timer.classList.add('danger');
                 } else if (timeRemaining <= 300) {
@@ -626,9 +913,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }
 
+        // Подтверждение отправки теста
+        document.getElementById('submit-btn').addEventListener('click', function(e) {
+            const unanswered = totalQuestions - Object.keys(answers).length;
+            if (unanswered > 0) {
+                if (!confirm(`У вас осталось ${unanswered} неотвеченных вопросов. Вы уверены, что хотите завершить тест?`)) {
+                    e.preventDefault();
+                }
+            } else {
+                if (!confirm('Вы уверены, что хотите завершить тест?')) {
+                    e.preventDefault();
+                }
+            }
+        });
+
         // Предотвращение выхода со страницы
         window.addEventListener('beforeunload', function(e) {
-            if (timeRemaining > 0) {
+            if (timeRemaining > 0 && Object.keys(answers).length > 0) {
                 const message = 'Вы уверены, что хотите покинуть страницу? Прогресс теста будет потерян.';
                 e.returnValue = message;
                 return message;

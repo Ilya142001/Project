@@ -3,7 +3,7 @@ include 'config.php';
 
 // Проверяем, авторизован ли пользователь
 if (!isset($_SESSION['user_id'])) {
-    header("Location: index.php");
+    echo "<script>window.parent.postMessage('closeModal', '*');</script>";
     exit;
 }
 
@@ -14,7 +14,7 @@ $user = $stmt->fetch();
 
 // Проверяем права доступа
 if ($user['role'] == 'student') {
-    header("Location: tests.php");
+    echo "<script>window.parent.postMessage('closeModal', '*');</script>";
     exit;
 }
 
@@ -27,7 +27,7 @@ $stmt->execute([$test_id, $_SESSION['user_id']]);
 $test = $stmt->fetch();
 
 if (!$test) {
-    header("Location: tests.php");
+    echo "<script>window.parent.postMessage('closeModal', '*');</script>";
     exit;
 }
 
@@ -180,9 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             --dark: #1e293b;
             --border: #e2e8f0;
             --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-            --card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             --radius: 12px;
-            --transition: all 0.2s ease-in-out;
         }
         
         * {
@@ -193,60 +191,75 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            background: white;
             color: var(--dark);
             line-height: 1.6;
             min-height: 100vh;
+            overflow-x: hidden;
         }
         
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 20px;
+            max-width: 100%;
+            margin: 0;
+            padding: 0;
         }
         
         /* Header Styles */
         .header {
             background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
             color: white;
-            padding: 2rem;
-            border-radius: var(--radius);
-            margin-bottom: 2rem;
+            padding: 1.5rem 2rem;
             box-shadow: var(--card-shadow);
-            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
         }
         
         .header h1 {
-            font-size: 2.5rem;
+            font-size: 1.75rem;
             font-weight: 700;
-            margin-bottom: 1rem;
             display: flex;
             align-items: center;
             gap: 1rem;
         }
         
-        .nav {
+        .header-actions {
             display: flex;
             gap: 1rem;
-            flex-wrap: wrap;
+            align-items: center;
         }
         
-        .nav-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
+        .close-btn {
+            background: rgba(255, 255, 255, 0.2);
             color: white;
-            text-decoration: none;
+            border: none;
             padding: 0.75rem 1.5rem;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.15);
-            transition: var(--transition);
-            font-weight: 500;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            text-decoration: none;
         }
         
-        .nav-link:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-1px);
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        /* Main Content */
+        .main-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
         }
         
         /* Card Styles */
@@ -257,11 +270,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             margin-bottom: 2rem;
             box-shadow: var(--card-shadow);
             border: 1px solid var(--border);
-            transition: var(--transition);
-        }
-        
-        .card:hover {
-            box-shadow: var(--card-shadow-hover);
         }
         
         .card-header {
@@ -328,7 +336,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             border: 2px solid var(--border);
             border-radius: 8px;
             font-size: 1rem;
-            transition: var(--transition);
             font-family: inherit;
         }
         
@@ -357,7 +364,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             font-weight: 600;
             text-decoration: none;
             cursor: pointer;
-            transition: var(--transition);
             font-family: inherit;
         }
         
@@ -368,8 +374,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         .btn-primary:hover {
             background: var(--primary-hover);
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
         }
         
         .btn-success {
@@ -379,8 +383,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         .btn-success:hover {
             background: #059669;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
         }
         
         .btn-danger {
@@ -390,8 +392,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         .btn-danger:hover {
             background: #dc2626;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
         }
         
         .btn-sm {
@@ -444,13 +444,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             padding: 1.5rem;
             margin-bottom: 1rem;
             border: 1px solid var(--border);
-            transition: var(--transition);
             position: relative;
-        }
-        
-        .question-item:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--card-shadow-hover);
         }
         
         .question-header {
@@ -468,11 +462,6 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             padding: 0.5rem;
             border-radius: 6px;
             background: var(--light);
-            transition: var(--transition);
-        }
-        
-        .handle:hover {
-            background: var(--border);
         }
         
         .question-number {
@@ -519,16 +508,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             background: var(--light);
             border-radius: 6px;
             border-left: 3px solid var(--secondary);
-            transition: var(--transition);
         }
         
         .options-list li.correct {
             background: #f0fdf4;
             border-left-color: var(--success);
-        }
-        
-        .options-list li:hover {
-            transform: translateX(4px);
         }
         
         .question-actions {
@@ -571,20 +555,27 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         /* Responsive Design */
         @media (max-width: 768px) {
-            .container {
+            .main-content {
                 padding: 1rem;
             }
             
             .header {
-                padding: 1.5rem;
+                padding: 1rem;
             }
             
             .header h1 {
-                font-size: 2rem;
+                font-size: 1.5rem;
             }
             
-            .nav {
+            .header-content {
                 flex-direction: column;
+                gap: 1rem;
+                align-items: flex-start;
+            }
+            
+            .header-actions {
+                width: 100%;
+                justify-content: flex-end;
             }
             
             .test-info {
@@ -609,243 +600,234 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             }
         }
         
-        /* Animation */
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        /* Compact styles for modal */
+        .compact .card {
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
         }
         
-        .question-item {
-            animation: fadeIn 0.3s ease-out;
-        }
-        
-        /* Drag and Drop Styles */
-        .sortable-helper {
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-            transform: rotate(2deg);
-        }
-        
-        .sortable-placeholder {
-            background: var(--light);
-            border: 2px dashed var(--border);
-            border-radius: 12px;
+        .compact .card-header {
             margin-bottom: 1rem;
-            height: 100px;
+            padding-bottom: 0.75rem;
+        }
+        
+        .compact .card-title {
+            font-size: 1.25rem;
+        }
+        
+        .compact .btn {
+            padding: 0.75rem 1.5rem;
         }
     </style>
 </head>
-<body>
+<body class="compact">
     <div class="container">
         <header class="header">
-            <h1>
-                <i class="fas fa-edit"></i>
-                Редактирование теста: <?php echo htmlspecialchars($test['title']); ?>
-            </h1>
-            <nav class="nav">
-                <a href="tests.php" class="nav-link">
-                    <i class="fas fa-arrow-left"></i>
-                    Мои тесты
-                </a>
-                <a href="logout.php" class="nav-link">
-                    <i class="fas fa-sign-out-alt"></i>
-                    Выйти
-                </a>
-            </nav>
+            <div class="header-content">
+                <h1>
+                    <i class="fas fa-edit"></i>
+                    Редактирование: <?php echo htmlspecialchars($test['title']); ?>
+                </h1>
+                <div class="header-actions">
+                    <button class="close-btn" onclick="closeModal()">
+                        <i class="fas fa-times"></i>
+                        Закрыть
+                    </button>
+                </div>
+            </div>
         </header>
 
-        <?php if (isset($error)): ?>
-            <div class="alert alert-error">
-                <i class="fas fa-exclamation-circle"></i>
-                <?php echo $error; ?>
-            </div>
-        <?php endif; ?>
+        <div class="main-content">
+            <?php if (isset($error)): ?>
+                <div class="alert alert-error">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <?php echo $error; ?>
+                </div>
+            <?php endif; ?>
 
-        <div class="card">
-            <div class="test-info">
-                <div class="test-details">
-                    <h2 class="card-title">
-                        <i class="fas fa-info-circle"></i>
-                        Информация о тесте
-                    </h2>
-                    <p><strong>Описание:</strong> <?php echo htmlspecialchars($test['description']); ?></p>
-                    <p><strong>Время на выполнение:</strong> <?php echo $test['time_limit']; ?> минут</p>
-                    <p><strong>Статус:</strong> 
-                        <?php echo $test['is_active'] ? 'Активный' : 'Неактивный'; ?> | 
-                        <?php echo $test['is_published'] ? 'Опубликован' : 'Черновик'; ?>
-                    </p>
-                </div>
-                <a href="test_settings.php?id=<?php echo $test_id; ?>" class="btn btn-primary">
-                    <i class="fas fa-cog"></i>
-                    Настройки теста
-                </a>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="fas fa-plus-circle"></i>
-                    Добавить вопрос
-                </h2>
-            </div>
-            <form method="POST">
-                <div class="form-group">
-                    <label class="form-label">
-                        <i class="fas fa-question-circle"></i>
-                        Текст вопроса:
-                    </label>
-                    <textarea name="question_text" class="form-textarea" required placeholder="Введите текст вопроса..."></textarea>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">
-                        <i class="fas fa-list-alt"></i>
-                        Тип вопроса:
-                    </label>
-                    <select name="question_type" id="question_type" class="form-select" onchange="toggleOptions()">
-                        <option value="text">Текстовый ответ</option>
-                        <option value="multiple_choice">Множественный выбор</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label class="form-label">
-                        <i class="fas fa-star"></i>
-                        Баллы:
-                    </label>
-                    <input type="number" name="points" class="form-input" value="1" min="1" required>
-                </div>
-                
-                <div id="options_container" class="options-container" style="display: none;">
-                    <h3 style="margin-bottom: 1rem; color: var(--dark);">
-                        <i class="fas fa-list-ol"></i>
-                        Варианты ответов
-                    </h3>
-                    <div id="options_list">
-                        <div class="option-item">
-                            <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 1">
-                            <input type="radio" name="correct_option" value="0" checked> 
-                            <span class="correct-marker">Правильный</span>
-                        </div>
-                        <div class="option-item">
-                            <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 2">
-                            <input type="radio" name="correct_option" value="1"> 
-                            <span class="correct-marker">Правильный</span>
-                        </div>
+            <div class="card">
+                <div class="test-info">
+                    <div class="test-details">
+                        <h2 class="card-title">
+                            <i class="fas fa-info-circle"></i>
+                            Информация о тесте
+                        </h2>
+                        <p><strong>Описание:</strong> <?php echo htmlspecialchars($test['description']); ?></p>
+                        <p><strong>Время на выполнение:</strong> <?php echo $test['time_limit']; ?> минут</p>
+                        <p><strong>Статус:</strong> 
+                            <?php echo $test['is_active'] ? 'Активный' : 'Неактивный'; ?> | 
+                            <?php echo $test['is_published'] ? 'Опубликован' : 'Черновик'; ?>
+                        </p>
                     </div>
-                    <button type="button" class="btn btn-primary" onclick="addOption()">
-                        <i class="fas fa-plus"></i>
-                        Добавить вариант
-                    </button>
+                    <a href="test_settings.php?id=<?php echo $test_id; ?>" class="btn btn-primary" target="_blank">
+                        <i class="fas fa-cog"></i>
+                        Настройки
+                    </a>
                 </div>
-                
-                <button type="submit" name="add_question" class="btn btn-success">
-                    <i class="fas fa-save"></i>
-                    Добавить вопрос
-                </button>
-            </form>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="fas fa-list"></i>
-                    Вопросы теста
-                    <span class="badge badge-primary"><?php echo count($questions); ?></span>
-                </h2>
             </div>
-            
-            <?php if (empty($questions)): ?>
-                <div class="empty-state">
-                    <i class="fas fa-inbox"></i>
-                    <h3>Вопросы пока не добавлены</h3>
-                    <p>Добавьте первый вопрос, используя форму выше</p>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="fas fa-plus-circle"></i>
+                        Добавить вопрос
+                    </h2>
                 </div>
-            <?php else: ?>
-                <form method="POST" id="order_form">
-                    <ul id="sortable" class="sortable-list">
-                        <?php foreach ($questions as $index => $question): ?>
-                            <li class="question-item" data-id="<?php echo $question['id']; ?>">
-                                <div class="question-header">
-                                    <span class="handle">
-                                        <i class="fas fa-bars"></i>
-                                    </span>
-                                    <span class="question-number">Вопрос #<?php echo ($index + 1); ?></span>
-                                    <span class="badge badge-primary"><?php echo $question['points']; ?> баллов</span>
-                                    <span class="badge badge-secondary">
-                                        <?php echo $question['question_type'] == 'text' ? 'Текстовый' : 'Множественный выбор'; ?>
-                                    </span>
-                                </div>
-                                
-                                <div class="question-text">
-                                    <?php echo nl2br(htmlspecialchars($question['question_text'])); ?>
-                                </div>
-                                
-                                <?php if ($question['question_type'] == 'multiple_choice'): ?>
-                                    <?php
-                                    $stmt = $pdo->prepare("SELECT * FROM question_options WHERE question_id = ? ORDER BY id");
-                                    $stmt->execute([$question['id']]);
-                                    $options = $stmt->fetchAll();
-                                    ?>
-                                    <?php if (!empty($options)): ?>
-                                        <div class="options-list">
-                                            <h4 style="margin-bottom: 0.75rem; color: var(--dark);">
-                                                <i class="fas fa-list-check"></i>
-                                                Варианты ответов:
-                                            </h4>
-                                            <ul>
-                                                <?php foreach ($options as $option): ?>
-                                                    <li class="<?php echo $option['is_correct'] ? 'correct' : ''; ?>">
-                                                        <?php echo htmlspecialchars($option['option_text']); ?>
-                                                        <?php if ($option['is_correct']): ?>
-                                                            <span class="correct-marker">
-                                                                <i class="fas fa-check"></i>
-                                                                Правильный
-                                                            </span>
-                                                        <?php endif; ?>
-                                                    </li>
-                                                <?php endforeach; ?>
-                                            </ul>
-                                        </div>
-                                    <?php endif; ?>
-                                <?php endif; ?>
-                                
-                                <div class="question-actions">
-                                    <a href="question_edit.php?id=<?php echo $question['id']; ?>" class="btn btn-primary btn-sm">
-                                        <i class="fas fa-edit"></i>
-                                        Редактировать
-                                    </a>
-                                    <a href="test_edit.php?id=<?php echo $test_id; ?>&delete_question=<?php echo $question['id']; ?>" 
-                                       class="btn btn-danger btn-sm" 
-                                       onclick="return confirm('Удалить этот вопрос?')">
-                                        <i class="fas fa-trash"></i>
-                                        Удалить
-                                    </a>
-                                </div>
-                                
-                                <input type="hidden" name="order[]" value="<?php echo $question['id']; ?>">
-                            </li>
-                        <?php endforeach; ?>
-                    </ul>
+                <form method="POST">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-question-circle"></i>
+                            Текст вопроса:
+                        </label>
+                        <textarea name="question_text" class="form-textarea" required placeholder="Введите текст вопроса..."></textarea>
+                    </div>
                     
-                    <button type="submit" name="update_order" class="btn btn-success">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-list-alt"></i>
+                            Тип вопроса:
+                        </label>
+                        <select name="question_type" id="question_type" class="form-select" onchange="toggleOptions()">
+                            <option value="text">Текстовый ответ</option>
+                            <option value="multiple_choice">Множественный выбор</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-star"></i>
+                            Баллы:
+                        </label>
+                        <input type="number" name="points" class="form-input" value="1" min="1" required>
+                    </div>
+                    
+                    <div id="options_container" class="options-container" style="display: none;">
+                        <h3 style="margin-bottom: 1rem; color: var(--dark);">
+                            <i class="fas fa-list-ol"></i>
+                            Варианты ответов
+                        </h3>
+                        <div id="options_list">
+                            <div class="option-item">
+                                <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 1">
+                                <input type="radio" name="correct_option" value="0" checked> 
+                                <span class="correct-marker">Правильный</span>
+                            </div>
+                            <div class="option-item">
+                                <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 2">
+                                <input type="radio" name="correct_option" value="1"> 
+                                <span class="correct-marker">Правильный</span>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="addOption()">
+                            <i class="fas fa-plus"></i>
+                            Добавить вариант
+                        </button>
+                    </div>
+                    
+                    <button type="submit" name="add_question" class="btn btn-success">
                         <i class="fas fa-save"></i>
-                        Сохранить порядок
+                        Добавить вопрос
                     </button>
                 </form>
-            <?php endif; ?>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">
+                        <i class="fas fa-list"></i>
+                        Вопросы теста
+                        <span class="badge badge-primary"><?php echo count($questions); ?></span>
+                    </h2>
+                </div>
+                
+                <?php if (empty($questions)): ?>
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <h3>Вопросы пока не добавлены</h3>
+                        <p>Добавьте первый вопрос, используя форму выше</p>
+                    </div>
+                <?php else: ?>
+                    <form method="POST" id="order_form">
+                        <ul id="sortable" class="sortable-list">
+                            <?php foreach ($questions as $index => $question): ?>
+                                <li class="question-item" data-id="<?php echo $question['id']; ?>">
+                                    <div class="question-header">
+                                        <span class="handle">
+                                            <i class="fas fa-bars"></i>
+                                        </span>
+                                        <span class="question-number">Вопрос #<?php echo ($index + 1); ?></span>
+                                        <span class="badge badge-primary"><?php echo $question['points']; ?> баллов</span>
+                                        <span class="badge badge-secondary">
+                                            <?php echo $question['question_type'] == 'text' ? 'Текстовый' : 'Множественный выбор'; ?>
+                                        </span>
+                                    </div>
+                                    
+                                    <div class="question-text">
+                                        <?php echo nl2br(htmlspecialchars($question['question_text'])); ?>
+                                    </div>
+                                    
+                                    <?php if ($question['question_type'] == 'multiple_choice'): ?>
+                                        <?php
+                                        $stmt = $pdo->prepare("SELECT * FROM question_options WHERE question_id = ? ORDER BY id");
+                                        $stmt->execute([$question['id']]);
+                                        $options = $stmt->fetchAll();
+                                        ?>
+                                        <?php if (!empty($options)): ?>
+                                            <div class="options-list">
+                                                <h4 style="margin-bottom: 0.75rem; color: var(--dark);">
+                                                    <i class="fas fa-list-check"></i>
+                                                    Варианты ответов:
+                                                </h4>
+                                                <ul>
+                                                    <?php foreach ($options as $option): ?>
+                                                        <li class="<?php echo $option['is_correct'] ? 'correct' : ''; ?>">
+                                                            <?php echo htmlspecialchars($option['option_text']); ?>
+                                                            <?php if ($option['is_correct']): ?>
+                                                                <span class="correct-marker">
+                                                                    <i class="fas fa-check"></i>
+                                                                    Правильный
+                                                                </span>
+                                                            <?php endif; ?>
+                                                        </li>
+                                                    <?php endforeach; ?>
+                                                </ul>
+                                            </div>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                    
+                                    <div class="question-actions">
+                                        <a href="question_edit.php?id=<?php echo $question['id']; ?>" class="btn btn-primary btn-sm" target="_blank">
+                                            <i class="fas fa-edit"></i>
+                                            Редактировать
+                                        </a>
+                                        <a href="test_edit.php?id=<?php echo $test_id; ?>&delete_question=<?php echo $question['id']; ?>" 
+                                           class="btn btn-danger btn-sm" 
+                                           onclick="return confirm('Удалить этот вопрос?')">
+                                            <i class="fas fa-trash"></i>
+                                            Удалить
+                                        </a>
+                                    </div>
+                                    
+                                    <input type="hidden" name="order[]" value="<?php echo $question['id']; ?>">
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                        
+                        <button type="submit" name="update_order" class="btn btn-success">
+                            <i class="fas fa-save"></i>
+                            Сохранить порядок
+                        </button>
+                    </form>
+                <?php endif; ?>
+            </div>
         </div>
     </div>
 
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://code.jquery.com/ui/1.13.1/jquery-ui.min.js"></script>
     <script>
+    function closeModal() {
+        window.parent.postMessage('closeModal', '*');
+    }
+    
     function toggleOptions() {
         const type = document.getElementById('question_type').value;
         const container = document.getElementById('options_container');
@@ -883,34 +865,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         }
     }
     
-    // Сортировка вопросов
-    $(function() {
-        $("#sortable").sortable({
-            handle: ".handle",
-            placeholder: "sortable-placeholder",
-            helper: function(e, ui) {
-                ui.children().each(function() {
-                    $(this).width($(this).width());
-                });
-                return ui;
-            },
-            update: function() {
-                $('#sortable li').each(function(index) {
-                    $(this).find('.question-number').text('Вопрос #' + (index + 1));
-                });
-            }
-        });
-        $("#sortable").disableSelection();
-    });
-    
     // Инициализация при загрузке
     document.addEventListener('DOMContentLoaded', function() {
         toggleOptions();
-        
-        // Добавляем анимацию для карточек
-        document.querySelectorAll('.question-item').forEach((item, index) => {
-            item.style.animationDelay = `${index * 0.1}s`;
-        });
     });
     </script>
 </body>
