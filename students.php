@@ -1168,8 +1168,34 @@ if (isset($_GET['action']) && $_GET['action'] == 'export_students') {
                              data-attempts="<?php echo $student['test_attempts']; ?>"
                              data-created="<?php echo strtotime($student['created_at']); ?>">
                             <div class="student-avatar">
-                                <?php echo strtoupper(substr($student['full_name'], 0, 1)); ?>
-                            </div>
+    <?php 
+    $avatarPath = !empty($student['avatar']) ? $student['avatar'] : 'default-avatar.png';
+    
+    // Проверяем разные возможные пути
+    $actualPath = null;
+    if ($avatarPath !== 'default-avatar.png') {
+        $possiblePaths = [
+            $avatarPath,
+            'uploads/avatars/' . $avatarPath,
+            '../uploads/avatars/' . $avatarPath,
+            './uploads/avatars/' . $avatarPath,
+        ];
+        
+        foreach ($possiblePaths as $path) {
+            if (file_exists($path)) {
+                $actualPath = $path;
+                break;
+            }
+        }
+    }
+    
+    if ($actualPath) {
+        echo '<img src="' . $actualPath . '" alt="Аватар" style="width: 50px; height: 50px; border-radius: 50%; object-fit: cover;">';
+    } else {
+        echo strtoupper(substr($student['full_name'], 0, 1));
+    }
+    ?>
+</div>
                             <div class="student-info">
                                 <div class="student-name"><?php echo $student['full_name']; ?></div>
                                 <div class="student-details">
