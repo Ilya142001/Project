@@ -1,5 +1,6 @@
 <?php
 include 'config.php';
+
 // Показываем сообщения об успехе/ошибке
 if (isset($_SESSION['success_message'])) {
     $success_message = $_SESSION['success_message'];
@@ -10,6 +11,7 @@ if (isset($_SESSION['error_message'])) {
     $error_message = $_SESSION['error_message'];
     unset($_SESSION['error_message']);
 }
+
 // Проверяем, авторизован ли пользователь
 if (!isset($_SESSION['user_id'])) {
     header("Location: index.php");
@@ -177,7 +179,6 @@ if ($user['role'] == 'student') {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* Стили из dashboard.php */
         * {
             margin: 0;
             padding: 0;
@@ -770,10 +771,47 @@ if ($user['role'] == 'student') {
             border-color: var(--primary);
         }
         
-        /* Charts */
-        .chart-container {
-            position: relative;
-            height: 300px;
+        /* Alert messages */
+        .alert {
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border-left: 4px solid var(--success);
+        }
+        
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-left: 4px solid var(--accent);
+        }
+        
+        .alert i {
+            margin-right: 10px;
+            font-size: 20px;
+        }
+        
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--gray);
+        }
+        
+        .empty-state i {
+            font-size: 50px;
+            margin-bottom: 15px;
+            color: #ddd;
+        }
+        
+        .empty-state p {
+            font-size: 16px;
             margin-bottom: 20px;
         }
         
@@ -860,50 +898,6 @@ if ($user['role'] == 'student') {
             .stats-grid {
                 grid-template-columns: 1fr;
             }
-        }
-        
-        /* Alert messages */
-        .alert {
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-        }
-        
-        .alert-success {
-            background-color: #d4edda;
-            color: #155724;
-            border-left: 4px solid var(--success);
-        }
-        
-        .alert-error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border-left: 4px solid var(--accent);
-        }
-        
-        .alert i {
-            margin-right: 10px;
-            font-size: 20px;
-        }
-        
-        /* Empty state */
-        .empty-state {
-            text-align: center;
-            padding: 40px 20px;
-            color: var(--gray);
-        }
-        
-        .empty-state i {
-            font-size: 50px;
-            margin-bottom: 15px;
-            color: #ddd;
-        }
-        
-        .empty-state p {
-            font-size: 16px;
-            margin-bottom: 20px;
         }
     </style>
 </head>
@@ -1357,46 +1351,6 @@ if ($user['role'] == 'student') {
                 this.form.submit();
             }, 800);
         });
-        
-        // Инициализация графиков для преподавателей
-        <?php if (($user['role'] == 'teacher' || $user['role'] == 'admin') && count($tests) > 0): ?>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Создаем график распределения статусов тестов
-            const statusCtx = document.getElementById('testStatusChart');
-            if (statusCtx) {
-                const statusChart = new Chart(statusCtx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Опубликованные', 'Черновики'],
-                        datasets: [{
-                            data: [<?php echo $published_tests; ?>, <?php echo $draft_tests; ?>],
-                            backgroundColor: [
-                                'rgba(46, 204, 113, 0.8)',
-                                'rgba(127, 140, 141, 0.8)'
-                            ],
-                            borderColor: [
-                                'rgba(46, 204, 113, 1)',
-                                'rgba(127, 140, 141, 1)'
-                            ],
-                            borderWidth: 1
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'bottom',
-                            },
-                            title: {
-                                display: true,
-                                text: 'Распределение тестов по статусам'
-                            }
-                        }
-                    }
-                });
-            }
-        });
-        <?php endif; ?>
     </script>
 </body>
 </html>
