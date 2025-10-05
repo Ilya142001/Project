@@ -1,9 +1,18 @@
 <?php
 include 'config.php';
+session_start();
 
-// Проверяем, авторизован ли пользователь
+// Проверяем авторизацию
 if (!isset($_SESSION['user_id'])) {
-    header("Location: index.php");
+    header("Location: login.php");
+    exit;
+}
+
+// Получаем ID результата
+$result_id = $_GET['id'] ?? 0;
+
+if (!$result_id) {
+    header("Location: tests.php");
     exit;
 }
 
@@ -12,79 +21,165 @@ $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
-// Получаем ID теста
-$test_id = isset($_GET['test_id']) ? intval($_GET['test_id']) : 0;
-
-// Если учитель или админ - показываем все результаты, иначе только свои
+// Получаем детальную информацию о результате теста
 if ($user['role'] == 'student') {
-    $results_condition = " AND tr.user_id = ?";
-    $params = [$test_id, $_SESSION['user_id']];
+    $stmt = $pdo->prepare("
+        SELECT 
+            tr.*,
+            t.title as test_title,
+            t.description as test_description,
+            t.subject,
+            t.time_limit,
+            t.passing_score,
+            u.full_name as teacher_name,
+            (SELECT COUNT(*) FROM test_results WHERE test_id = t.id AND user_id = ?) as total_attempts,
+            (SELECT AVG(percentage) FROM test_results WHERE test_id = t.id AND user_id = ?) as user_avg_score
+        FROM test_results tr
+        JOIN tests t ON tr.test_id = t.id
+        JOIN users u ON t.created_by = u.id
+        WHERE tr.id = ? AND tr.user_id = ?
+    ");
+    $stmt->execute([$_SESSION['user_id'], $_SESSION['user_id'], $result_id, $_SESSION['user_id']]);
 } else {
-    $results_condition = "";
-    $params = [$test_id];
+    $stmt = $pdo->prepare("
+        SELECT 
+            tr.*,
+            t.title as test_title,
+            t.description as test_description,
+            t.subject,
+            t.time_limit,
+            t.passing_score,
+            u_student.full_name as student_name,
+            u_student.group_name,
+            u_teacher.full_name as teacher_name,
+            (SELECT COUNT(*) FROM test_results WHERE test_id = t.id AND user_id = tr.user_id) as student_attempts
+        FROM test_results tr
+        JOIN tests t ON tr.test_id = t.id
+        JOIN users u_student ON tr.user_id = u_student.id
+        JOIN users u_teacher ON t.created_by = u_teacher.id
+        WHERE tr.id = ? AND (t.created_by = ? OR ? = 'admin')
+    ");
+    $stmt->execute([$result_id, $_SESSION['user_id'], $user['role']]);
 }
 
-// Получаем информацию о тесте
-$stmt = $pdo->prepare("SELECT * FROM tests WHERE id = ?");
-$stmt->execute([$test_id]);
-$test = $stmt->fetch();
+$result = $stmt->fetch();
 
-if (!$test) {
+if (!$result) {
     header("Location: tests.php");
     exit;
 }
 
-// Получаем результаты теста
-$sql = "SELECT 
-            tr.*, 
-            u.full_name, 
-            u.email,
-            ROUND((tr.score / tr.total_points * 100), 1) as percentage,
-            CASE 
-                WHEN (tr.score / tr.total_points * 100) >= 85 THEN 'excellent'
-                WHEN (tr.score / tr.total_points * 100) >= 70 THEN 'good'
-                WHEN (tr.score / tr.total_points * 100) >= 50 THEN 'average'
-                ELSE 'poor'
-            END as performance
-        FROM test_results tr 
-        JOIN users u ON tr.user_id = u.id 
-        WHERE tr.test_id = ? $results_condition 
-        ORDER BY tr.completed_at DESC";
+// Получаем ответы пользователя на вопросы
+$stmt = $pdo->prepare("
+    SELECT 
+        ua.*,
+        q.question_text,
+        q.question_type,
+        q.correct_answer,
+        q.points,
+        q.options,
+        q.explanation
+    FROM user_answers ua
+    JOIN questions q ON ua.question_id = q.id
+    WHERE ua.result_id = ?
+    ORDER BY ua.id
+");
+$stmt->execute([$result_id]);
+$user_answers = $stmt->fetchAll();
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$results = $stmt->fetchAll();
+// Вычисляем статистику по ответам
+$total_questions = count($user_answers);
+$correct_answers = 0;
+$points_earned = 0;
+$total_points = 0;
 
-// Получаем статистику
-$stats_sql = "SELECT 
-                COUNT(*) as total_attempts,
-                AVG(tr.score) as avg_score,
-                MAX(tr.score) as max_score,
-                MIN(tr.score) as min_score,
-                AVG(tr.time_spent) as avg_time
-            FROM test_results tr 
-            WHERE tr.test_id = ? $results_condition";
-
-$stmt = $pdo->prepare($stats_sql);
-$stmt->execute($params);
-$stats = $stmt->fetch();
-
-// Обработка фильтров
-$filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
-
-if ($filter != 'all') {
-    $results = array_filter($results, function($result) use ($filter) {
-        return $result['performance'] == $filter;
-    });
+foreach ($user_answers as $answer) {
+    $total_points += $answer['points'];
+    if ($answer['is_correct']) {
+        $correct_answers++;
+        $points_earned += $answer['points'];
+    }
 }
 
-// Обработка поиска
-$search = isset($_GET['search']) ? trim($_GET['search']) : '';
-if (!empty($search)) {
-    $results = array_filter($results, function($result) use ($search) {
-        return stripos($result['full_name'], $search) !== false || 
-               stripos($result['email'], $search) !== false;
-    });
+// Анализ результатов по типам вопросов
+$question_types = [];
+foreach ($user_answers as $answer) {
+    $type = $answer['question_type'];
+    if (!isset($question_types[$type])) {
+        $question_types[$type] = ['total' => 0, 'correct' => 0];
+    }
+    $question_types[$type]['total']++;
+    if ($answer['is_correct']) {
+        $question_types[$type]['correct']++;
+    }
+}
+
+// Получаем рекомендации на основе результата
+$recommendations = [];
+
+if ($result['percentage'] < 60) {
+    $recommendations[] = [
+        'type' => 'danger',
+        'title' => 'Низкий результат',
+        'message' => 'Рекомендуем повторить материал и пройти тест еще раз. Обратите внимание на вопросы, где были допущены ошибки.'
+    ];
+} elseif ($result['percentage'] < 80) {
+    $recommendations[] = [
+        'type' => 'warning',
+        'title' => 'Хороший результат',
+        'message' => 'Результат выше среднего, но есть возможности для улучшения. Проанализируйте ошибки для дальнейшего прогресса.'
+    ];
+} else {
+    $recommendations[] = [
+        'type' => 'success',
+        'title' => 'Отличный результат!',
+        'message' => 'Поздравляем с высоким результатом! Продолжайте в том же духе.'
+    ];
+}
+
+// Анализ слабых мест
+$weak_areas = [];
+foreach ($user_answers as $index => $answer) {
+    if (!$answer['is_correct']) {
+        $weak_areas[] = [
+            'question_number' => $index + 1,
+            'question_text' => $answer['question_text'],
+            'user_answer' => $answer['user_answer'],
+            'correct_answer' => $answer['correct_answer'],
+            'question_type' => $answer['question_type']
+        ];
+    }
+}
+
+if (!empty($weak_areas)) {
+    $recommendations[] = [
+        'type' => 'info',
+        'title' => 'Внимание на ошибки',
+        'message' => 'Обратите особое внимание на вопросы, где были допущены ошибки. Рекомендуем изучить эти темы дополнительно.'
+    ];
+}
+
+// Анализ по типам вопросов
+foreach ($question_types as $type => $stats) {
+    $success_rate = ($stats['correct'] / $stats['total']) * 100;
+    if ($success_rate < 60) {
+        $type_name = get_question_type_name($type);
+        $recommendations[] = [
+            'type' => 'info',
+            'title' => "Слабый результат по {$type_name}",
+            'message' => "Вам стоит уделить больше внимания вопросам типа '{$type_name}'. Успешность: " . round($success_rate, 1) . "%"
+        ];
+    }
+}
+
+function get_question_type_name($type) {
+    $names = [
+        'single' => 'одиночный выбор',
+        'multiple' => 'множественный выбор',
+        'text' => 'текстовый ответ',
+        'code' => 'программный код'
+    ];
+    return $names[$type] ?? $type;
 }
 ?>
 
@@ -93,590 +188,948 @@ if (!empty($search)) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Результаты теста - <?php echo htmlspecialchars($test['title']); ?></title>
+    <title>Просмотр результата - Система интеллектуальной оценки знаний</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root {
-            --primary: #6366f1;
-            --primary-hover: #4f46e5;
-            --secondary: #64748b;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --info: #3b82f6;
-            --light: #f8fafc;
-            --dark: #1e293b;
-            --border: #e2e8f0;
-            --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
-            --card-shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            --radius: 12px;
-            --transition: all 0.2s ease-in-out;
-        }
-
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-
+        
+        :root {
+            --primary: #3498db;
+            --primary-dark: #2980b9;
+            --secondary: #2c3e50;
+            --accent: #e74c3c;
+            --light: #f5f7fa;
+            --gray: #7f8c8d;
+            --success: #2ecc71;
+            --warning: #f39c12;
+            --danger: #e74c3c;
+            --info: #17a2b8;
+        }
+        
         body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
-            color: var(--dark);
+            background-color: #f0f2f5;
+            color: #333;
             line-height: 1.6;
-            min-height: 100vh;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
         }
 
-        /* Header Styles */
         .header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
-            color: white;
-            padding: 2rem;
-            border-radius: var(--radius);
-            margin-bottom: 2rem;
-            box-shadow: var(--card-shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #e0e0e0;
         }
-
+        
         .header h1 {
-            font-size: 2.5rem;
+            font-size: 32px;
+            color: var(--secondary);
             font-weight: 700;
-            margin-bottom: 1rem;
+        }
+        
+        .breadcrumb {
             display: flex;
             align-items: center;
-            gap: 1rem;
+            gap: 10px;
+            color: var(--gray);
+            font-size: 14px;
+        }
+        
+        .breadcrumb a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .breadcrumb i {
+            font-size: 12px;
         }
 
-        .nav {
+        /* Main Result Overview */
+        .result-overview {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+            border-left: 6px solid var(--primary);
+        }
+        
+        .result-overview.success {
+            border-left-color: var(--success);
+        }
+        
+        .result-overview.warning {
+            border-left-color: var(--warning);
+        }
+        
+        .result-overview.danger {
+            border-left-color: var(--danger);
+        }
+
+        .overview-header {
             display: flex;
-            gap: 1rem;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 25px;
+        }
+        
+        .test-info h2 {
+            font-size: 24px;
+            color: var(--secondary);
+            margin-bottom: 10px;
+        }
+        
+        .test-description {
+            color: var(--gray);
+            margin-bottom: 15px;
+        }
+        
+        .test-meta {
+            display: flex;
+            gap: 20px;
             flex-wrap: wrap;
         }
-
-        .nav-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            color: white;
-            text-decoration: none;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.15);
-            transition: var(--transition);
-            font-weight: 500;
-        }
-
-        .nav-link:hover {
-            background: rgba(255, 255, 255, 0.25);
-            transform: translateY(-1px);
-        }
-
-        /* Card Styles */
-        .card {
-            background: white;
-            border-radius: var(--radius);
-            padding: 2rem;
-            margin-bottom: 2rem;
-            box-shadow: var(--card-shadow);
-            border: 1px solid var(--border);
-        }
-
-        .card-header {
+        
+        .meta-item {
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 2px solid var(--light);
+            gap: 8px;
+            color: var(--gray);
+            font-size: 14px;
         }
-
-        .card-title {
-            font-size: 1.5rem;
+        
+        .score-section {
+            text-align: center;
+            padding: 20px;
+            background: var(--light);
+            border-radius: 10px;
+            min-width: 200px;
+        }
+        
+        .score-value {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .score-excellent {
+            color: var(--success);
+        }
+        
+        .score-good {
+            color: var(--warning);
+        }
+        
+        .score-poor {
+            color: var(--danger);
+        }
+        
+        .score-label {
+            font-size: 16px;
+            color: var(--gray);
+            margin-bottom: 10px;
+        }
+        
+        .status-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
             font-weight: 600;
-            color: var(--dark);
+        }
+        
+        .status-passed {
+            background: rgba(46, 204, 113, 0.1);
+            color: var(--success);
+        }
+        
+        .status-failed {
+            background: rgba(243, 156, 18, 0.1);
+            color: var(--warning);
+        }
+
+        /* Progress Section */
+        .progress-section {
+            margin-top: 20px;
+        }
+        
+        .progress-info {
             display: flex;
-            align-items: center;
-            gap: 0.75rem;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: var(--gray);
+        }
+        
+        .progress-bar {
+            height: 10px;
+            background: #e0e0e0;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            border-radius: 5px;
+            transition: width 0.8s ease;
+        }
+        
+        .progress-success {
+            background: linear-gradient(90deg, var(--success), #27ae60);
+        }
+        
+        .progress-warning {
+            background: linear-gradient(90deg, var(--warning), #e67e22);
+        }
+        
+        .progress-danger {
+            background: linear-gradient(90deg, var(--danger), #c0392b);
         }
 
         /* Stats Grid */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
         }
-
+        
         .stat-card {
-            background: linear-gradient(135deg, var(--light) 0%, #ffffff 100%);
-            padding: 1.5rem;
-            border-radius: var(--radius);
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
             border-left: 4px solid var(--primary);
-            box-shadow: var(--card-shadow);
         }
-
-        .stat-card.excellent { border-left-color: var(--success); }
-        .stat-card.good { border-left-color: var(--info); }
-        .stat-card.average { border-left-color: var(--warning); }
-        .stat-card.poor { border-left-color: var(--danger); }
-
-        .stat-number {
-            font-size: 2.5rem;
+        
+        .stat-value {
+            font-size: 32px;
             font-weight: 700;
-            color: var(--dark);
-            margin-bottom: 0.5rem;
+            color: var(--secondary);
+            margin-bottom: 5px;
         }
-
+        
         .stat-label {
-            font-size: 0.875rem;
+            color: var(--gray);
+            font-size: 14px;
+        }
+
+        /* Charts Section */
+        .charts-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-section {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .chart-title {
+            font-size: 18px;
             color: var(--secondary);
-            text-transform: uppercase;
+            margin-bottom: 20px;
+            text-align: center;
             font-weight: 600;
         }
 
-        .stat-description {
-            color: var(--secondary);
-            margin-top: 0.5rem;
-            font-size: 0.9rem;
+        /* Sections */
+        .section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            margin-bottom: 25px;
         }
-
-        /* Filters */
-        .filters {
+        
+        .section-header {
             display: flex;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f8f9fa;
+        }
+        
+        .section-header h2 {
+            font-size: 20px;
+            color: var(--secondary);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .section-header h2 i {
+            color: var(--primary);
+        }
+
+        /* Questions List */
+        .questions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .question-item {
+            padding: 20px;
+            border-radius: 10px;
+            border: 2px solid #f0f0f0;
+            transition: all 0.3s;
+        }
+        
+        .question-item.correct {
+            border-color: var(--success);
+            background: rgba(46, 204, 113, 0.05);
+        }
+        
+        .question-item.incorrect {
+            border-color: var(--danger);
+            background: rgba(231, 76, 60, 0.05);
+        }
+        
+        .question-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+        
+        .question-text {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--secondary);
+            flex: 1;
+            margin-right: 15px;
+            line-height: 1.4;
+        }
+        
+        .question-meta {
+            display: flex;
+            gap: 10px;
             align-items: center;
         }
-
-        .filter-btn {
-            padding: 0.75rem 1.5rem;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            background: white;
-            cursor: pointer;
-            transition: var(--transition);
-            font-weight: 500;
+        
+        .question-type {
+            background: var(--light);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--primary);
         }
-
-        .filter-btn:hover {
-            border-color: var(--primary);
-        }
-
-        .filter-btn.active {
-            background: var(--primary);
-            color: white;
-            border-color: var(--primary);
-        }
-
-        .search-box {
-            flex: 1;
-            max-width: 300px;
-            position: relative;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 0.75rem 1rem 0.75rem 3rem;
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            font-size: 1rem;
-            transition: var(--transition);
-        }
-
-        .search-input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        .search-icon {
-            position: absolute;
-            left: 1rem;
-            top: 50%;
-            transform: translateY(-50%);
+        
+        .question-points {
+            background: var(--light);
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 14px;
+            font-weight: 600;
             color: var(--secondary);
         }
-
-        /* Results Table */
-        .results-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            border-radius: var(--radius);
-            overflow: hidden;
-            box-shadow: var(--card-shadow);
+        
+        .question-answer {
+            margin-bottom: 15px;
         }
-
-        .results-table th,
-        .results-table td {
-            padding: 1rem;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .results-table th {
-            background: var(--light);
+        
+        .answer-label {
             font-weight: 600;
-            color: var(--dark);
-            cursor: pointer;
-            transition: var(--transition);
+            color: var(--secondary);
+            margin-bottom: 8px;
+            display: block;
         }
-
-        .results-table th:hover {
-            background: var(--border);
-        }
-
-        .results-table tr:hover {
-            background: #f8fafc;
-        }
-
-        .results-table tr:last-child td {
-            border-bottom: none;
-        }
-
-        /* Progress Bar */
-        .progress-bar {
-            width: 100%;
-            height: 8px;
+        
+        .user-answer {
+            padding: 12px;
             background: var(--light);
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 0.5rem 0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .user-answer.correct {
+            border-left-color: var(--success);
+            background: rgba(46, 204, 113, 0.1);
+        }
+        
+        .user-answer.incorrect {
+            border-left-color: var(--danger);
+            background: rgba(231, 76, 60, 0.1);
+        }
+        
+        .correct-answer {
+            padding: 12px;
+            background: rgba(46, 204, 113, 0.1);
+            border-radius: 8px;
+            border-left: 4px solid var(--success);
+        }
+        
+        .answer-explanation {
+            margin-top: 10px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            font-size: 14px;
+            color: var(--gray);
+            border-left: 3px solid var(--info);
         }
 
-        .progress-fill {
-            height: 100%;
-            border-radius: 4px;
-            transition: var(--transition);
+        /* Recommendations */
+        .recommendations-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
-
-        .progress-fill.excellent { background: var(--success); }
-        .progress-fill.good { background: var(--info); }
-        .progress-fill.average { background: var(--warning); }
-        .progress-fill.poor { background: var(--danger); }
-
-        /* Badges */
-        .badge {
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 0.875rem;
+        
+        .recommendation-item {
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid var(--primary);
+            background: var(--light);
+        }
+        
+        .recommendation-item.success {
+            border-left-color: var(--success);
+        }
+        
+        .recommendation-item.warning {
+            border-left-color: var(--warning);
+        }
+        
+        .recommendation-item.danger {
+            border-left-color: var(--danger);
+        }
+        
+        .recommendation-item.info {
+            border-left-color: var(--info);
+        }
+        
+        .recommendation-title {
             font-weight: 600;
-            display: inline-block;
+            margin-bottom: 8px;
+            color: var(--secondary);
+            font-size: 16px;
+        }
+        
+        .recommendation-message {
+            color: var(--gray);
+            font-size: 14px;
+            line-height: 1.5;
         }
 
-        .badge-excellent {
-            background: #ecfdf5;
-            color: var(--success);
-            border: 1px solid #d1fae5;
+        /* Actions */
+        .actions-section {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+            flex-wrap: wrap;
         }
-
-        .badge-good {
-            background: #eff6ff;
-            color: var(--info);
-            border: 1px solid #dbeafe;
-        }
-
-        .badge-average {
-            background: #fffbeb;
-            color: var(--warning);
-            border: 1px solid #fef3c7;
-        }
-
-        .badge-poor {
-            background: #fef2f2;
-            color: var(--danger);
-            border: 1px solid #fecaca;
-        }
-
-        /* Button Styles */
+        
         .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1.5rem;
+            padding: 12px 25px;
             border: none;
             border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
-            transition: var(--transition;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-align: center;
         }
-
+        
         .btn-primary {
             background: var(--primary);
             color: white;
         }
-
+        
         .btn-primary:hover {
-            background: var(--primary-hover);
-            transform: translateY(-1px);
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #27ae60;
+            transform: translateY(-2px);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .btn-outline:hover {
+            background: var(--primary);
+            color: white;
         }
 
-        .btn-sm {
-            padding: 0.5rem 1rem;
-            font-size: 0.875rem;
+        /* Back Button */
+        .back-button {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+        
+        .back-button:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
         }
 
-        /* Empty State */
-        .empty-state {
-            text-align: center;
-            padding: 3rem;
-            color: var(--secondary);
-        }
-
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            color: var(--border);
-        }
-
-        /* Responsive Design */
+        /* Responsive */
         @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            .header {
-                padding: 1.5rem;
-            }
-
-            .header h1 {
-                font-size: 2rem;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .filters {
+            .overview-header {
                 flex-direction: column;
-                align-items: stretch;
+                gap: 20px;
             }
-
-            .search-box {
-                max-width: none;
+            
+            .score-section {
+                width: 100%;
             }
-
-            .results-table {
-                display: block;
-                overflow-x: auto;
+            
+            .test-meta {
+                flex-direction: column;
+                gap: 10px;
             }
-
-            .nav {
+            
+            .actions-section {
                 flex-direction: column;
             }
-        }
-
-        /* Animation */
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
+            
+            .question-header {
+                flex-direction: column;
+                gap: 10px;
             }
-            to {
-                opacity: 1;
-                transform: translateY(0);
+            
+            .question-meta {
+                align-self: flex-start;
             }
-        }
-
-        .result-row {
-            animation: fadeIn 0.3s ease-out;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <header class="header">
-            <h1>
-                <i class="fas fa-chart-line"></i>
-                Результаты теста: <?php echo htmlspecialchars($test['title']); ?>
-            </h1>
-            <nav class="nav">
-                <a href="tests.php" class="nav-link">
-                    <i class="fas fa-arrow-left"></i>
-                    Назад к тестам
-                </a>
-                <a href="test_edit.php?id=<?php echo $test_id; ?>" class="nav-link">
-                    <i class="fas fa-edit"></i>
-                    Редактировать тест
-                </a>
-                <a href="logout.php" class="nav-link">
-                    <i class="fas fa-sign-out-alt"></i>
-                    Выйти
-                </a>
-            </nav>
-        </header>
+        <!-- Хлебные крошки -->
+        <a href="tests.php" class="back-button">
+            <i class="fas fa-arrow-left"></i>
+            Назад к тестам
+        </a>
+
+        <div class="header">
+            <h1><i class="fas fa-chart-bar"></i> Просмотр результата теста</h1>
+            <div class="breadcrumb">
+                <a href="index.php">Главная</a>
+                <i class="fas fa-chevron-right"></i>
+                <a href="tests.php">Тесты</a>
+                <i class="fas fa-chevron-right"></i>
+                <span>Результат</span>
+            </div>
+        </div>
+
+        <!-- Основная информация о результате -->
+        <div class="result-overview <?php echo $result['passed'] ? 'success' : 'danger'; ?>">
+            <div class="overview-header">
+                <div class="test-info">
+                    <h2><?php echo htmlspecialchars($result['test_title']); ?></h2>
+                    <?php if (!empty($result['test_description'])): ?>
+                        <p class="test-description"><?php echo htmlspecialchars($result['test_description']); ?></p>
+                    <?php endif; ?>
+                    <div class="test-meta">
+                        <div class="meta-item">
+                            <i class="fas fa-book"></i>
+                            Предмет: <?php echo htmlspecialchars($result['subject']); ?>
+                        </div>
+                        <div class="meta-item">
+                            <i class="fas fa-user"></i>
+                            Преподаватель: <?php echo htmlspecialchars($result['teacher_name']); ?>
+                        </div>
+                        <div class="meta-item">
+                            <i class="fas fa-calendar"></i>
+                            Дата прохождения: <?php echo date('d.m.Y H:i', strtotime($result['completed_at'])); ?>
+                        </div>
+                        <?php if ($user['role'] != 'student'): ?>
+                        <div class="meta-item">
+                            <i class="fas fa-user-graduate"></i>
+                            Студент: <?php echo htmlspecialchars($result['student_name']); ?>
+                            <?php if (!empty($result['group_name'])): ?>
+                                (Группа: <?php echo htmlspecialchars($result['group_name']); ?>)
+                            <?php endif; ?>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <div class="score-section">
+                    <div class="score-value <?php 
+                        echo $result['percentage'] >= 80 ? 'score-excellent' : 
+                             ($result['percentage'] >= 60 ? 'score-good' : 'score-poor'); 
+                    ?>">
+                        <?php echo round($result['percentage'], 1); ?>%
+                    </div>
+                    <div class="score-label">
+                        <?php echo $result['score']; ?> / <?php echo $result['total_points']; ?> баллов
+                    </div>
+                    <span class="status-badge <?php echo $result['passed'] ? 'status-passed' : 'status-failed'; ?>">
+                        <?php echo $result['passed'] ? 'Тест сдан' : 'Тест не сдан'; ?>
+                    </span>
+                    <?php if ($result['passing_score'] > 0): ?>
+                        <div style="margin-top: 8px; font-size: 12px; color: var(--gray);">
+                            Проходной балл: <?php echo $result['passing_score']; ?>%
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <!-- Прогресс бар -->
+            <div class="progress-section">
+                <div class="progress-info">
+                    <span>0%</span>
+                    <span>Прогресс: <?php echo round($result['percentage'], 1); ?>%</span>
+                    <span>100%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill <?php 
+                        echo $result['percentage'] >= 80 ? 'progress-success' : 
+                             ($result['percentage'] >= 60 ? 'progress-warning' : 'progress-danger'); 
+                    ?>" style="width: <?php echo $result['percentage']; ?>%"></div>
+                </div>
+            </div>
+        </div>
 
         <!-- Статистика -->
         <div class="stats-grid">
             <div class="stat-card">
-                <div class="stat-number"><?php echo $stats['total_attempts'] ?? 0; ?></div>
+                <div class="stat-value"><?php echo $correct_answers; ?>/<?php echo $total_questions; ?></div>
+                <div class="stat-label">Правильных ответов</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value"><?php echo $points_earned; ?>/<?php echo $total_points; ?></div>
+                <div class="stat-label">Набрано баллов</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value"><?php echo round(($correct_answers / $total_questions) * 100, 1); ?>%</div>
+                <div class="stat-label">Точность ответов</div>
+            </div>
+            <?php if ($user['role'] == 'student'): ?>
+            <div class="stat-card">
+                <div class="stat-value"><?php echo $result['total_attempts']; ?></div>
                 <div class="stat-label">Всего попыток</div>
-                <div class="stat-description">Общее количество завершенных тестов</div>
             </div>
-
             <div class="stat-card">
-                <div class="stat-number"><?php echo round($stats['avg_score'] ?? 0, 1); ?></div>
-                <div class="stat-label">Средний балл</div>
-                <div class="stat-description">Из <?php echo $test['time_limit']; ?> возможных</div>
+                <div class="stat-value"><?php echo round($result['user_avg_score'], 1); ?>%</div>
+                <div class="stat-label">Средний результат</div>
             </div>
-
+            <?php else: ?>
             <div class="stat-card">
-                <div class="stat-number"><?php echo $stats['max_score'] ?? 0; ?></div>
-                <div class="stat-label">Максимальный балл</div>
-                <div class="stat-description">Лучший результат</div>
+                <div class="stat-value"><?php echo $result['student_attempts']; ?></div>
+                <div class="stat-label">Попыток студента</div>
             </div>
+            <?php endif; ?>
+        </div>
 
-            <div class="stat-card">
-                <div class="stat-number"><?php echo round(($stats['avg_time'] ?? 0) / 60, 1); ?>м</div>
-                <div class="stat-label">Среднее время</div>
-                <div class="stat-description">Затрачено на тест</div>
+        <!-- Графики -->
+        <div class="charts-section">
+            <div class="chart-container">
+                <div class="chart-title">Распределение ответов</div>
+                <canvas id="answersChart" height="250"></canvas>
+            </div>
+            <div class="chart-container">
+                <div class="chart-title">Результаты по типам вопросов</div>
+                <canvas id="typesChart" height="250"></canvas>
             </div>
         </div>
 
-        <div class="card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <i class="fas fa-list-check"></i>
-                    Детализация результатов
-                </h2>
-                <span class="badge <?php echo count($results) > 0 ? 'badge-excellent' : 'badge-secondary'; ?>">
-                    <?php echo count($results); ?> записей
-                </span>
+        <!-- Детализация по вопросам -->
+        <div class="section">
+            <div class="section-header">
+                <h2><i class="fas fa-list-ol"></i> Детализация ответов</h2>
+                <span class="stat-label"><?php echo $correct_answers; ?> из <?php echo $total_questions; ?> правильно (<?php echo round(($correct_answers / $total_questions) * 100, 1); ?>%)</span>
             </div>
-
-            <!-- Фильтры и поиск -->
-            <div class="filters">
-                <div class="filter-group">
-                    <button class="filter-btn <?php echo $filter == 'all' ? 'active' : ''; ?>" onclick="setFilter('all')">
-                        Все результаты
-                    </button>
-                    <button class="filter-btn <?php echo $filter == 'excellent' ? 'active' : ''; ?>" onclick="setFilter('excellent')">
-                        Отлично (85%+)
-                    </button>
-                    <button class="filter-btn <?php echo $filter == 'good' ? 'active' : ''; ?>" onclick="setFilter('good')">
-                        Хорошо (70%+)
-                    </button>
-                    <button class="filter-btn <?php echo $filter == 'average' ? 'active' : ''; ?>" onclick="setFilter('average')">
-                        Удовлетворительно (50%+)
-                    </button>
-                    <button class="filter-btn <?php echo $filter == 'poor' ? 'active' : ''; ?>" onclick="setFilter('poor')">
-                        Неудовлетворительно
-                    </button>
-                </div>
-
-                <div class="search-box">
-                    <i class="fas fa-search search-icon"></i>
-                    <input type="text" class="search-input" placeholder="Поиск по имени или email..." 
-                           value="<?php echo htmlspecialchars($search); ?>" oninput="handleSearch(this.value)">
-                </div>
+            
+            <div class="questions-list">
+                <?php foreach ($user_answers as $index => $answer): ?>
+                    <div class="question-item <?php echo $answer['is_correct'] ? 'correct' : 'incorrect'; ?>">
+                        <div class="question-header">
+                            <div class="question-text">
+                                <strong>Вопрос <?php echo $index + 1; ?>:</strong> <?php echo htmlspecialchars($answer['question_text']); ?>
+                            </div>
+                            <div class="question-meta">
+                                <span class="question-type"><?php echo get_question_type_name($answer['question_type']); ?></span>
+                                <span class="question-points">
+                                    <?php echo $answer['is_correct'] ? $answer['points'] : 0; ?>/<?php echo $answer['points']; ?> баллов
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="question-answer">
+                            <span class="answer-label">Ваш ответ:</span>
+                            <div class="user-answer <?php echo $answer['is_correct'] ? 'correct' : 'incorrect'; ?>">
+                                <?php 
+                                if ($answer['question_type'] == 'multiple' && !empty($answer['user_answer'])) {
+                                    $user_answers_arr = json_decode($answer['user_answer'], true);
+                                    if (is_array($user_answers_arr)) {
+                                        echo '<ul style="margin: 0; padding-left: 20px;">';
+                                        foreach ($user_answers_arr as $user_ans) {
+                                            echo '<li>' . htmlspecialchars($user_ans) . '</li>';
+                                        }
+                                        echo '</ul>';
+                                    } else {
+                                        echo htmlspecialchars($answer['user_answer']);
+                                    }
+                                } else {
+                                    echo !empty($answer['user_answer']) ? htmlspecialchars($answer['user_answer']) : '<em style="color: var(--gray);">Ответ не предоставлен</em>';
+                                }
+                                ?>
+                            </div>
+                            
+                            <?php if (!$answer['is_correct']): ?>
+                                <span class="answer-label">Правильный ответ:</span>
+                                <div class="correct-answer">
+                                    <?php 
+                                    if ($answer['question_type'] == 'multiple' && !empty($answer['correct_answer'])) {
+                                        $correct_answers_arr = json_decode($answer['correct_answer'], true);
+                                        if (is_array($correct_answers_arr)) {
+                                            echo '<ul style="margin: 0; padding-left: 20px;">';
+                                            foreach ($correct_answers_arr as $correct_ans) {
+                                                echo '<li>' . htmlspecialchars($correct_ans) . '</li>';
+                                            }
+                                            echo '</ul>';
+                                        } else {
+                                            echo htmlspecialchars($answer['correct_answer']);
+                                        }
+                                    } else {
+                                        echo htmlspecialchars($answer['correct_answer']);
+                                    }
+                                    ?>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if (!empty($answer['explanation'])): ?>
+                                <div class="answer-explanation">
+                                    <strong><i class="fas fa-info-circle"></i> Объяснение:</strong><br>
+                                    <?php echo htmlspecialchars($answer['explanation']); ?>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             </div>
+        </div>
 
-            <?php if (empty($results)): ?>
-                <div class="empty-state">
-                    <i class="fas fa-inbox"></i>
-                    <h3>Результаты не найдены</h3>
-                    <p>Пока нет завершенных попыток этого теста</p>
-                </div>
+        <!-- Рекомендации -->
+        <?php if (!empty($recommendations)): ?>
+        <div class="section">
+            <div class="section-header">
+                <h2><i class="fas fa-lightbulb"></i> Рекомендации и анализ</h2>
+            </div>
+            <div class="recommendations-list">
+                <?php foreach ($recommendations as $rec): ?>
+                    <div class="recommendation-item <?php echo $rec['type']; ?>">
+                        <div class="recommendation-title"><?php echo htmlspecialchars($rec['title']); ?></div>
+                        <div class="recommendation-message"><?php echo htmlspecialchars($rec['message']); ?></div>
+                    </div>
+                <?php endforeach; ?>
+                
+                <?php if (!empty($weak_areas)): ?>
+                    <div class="recommendation-item info">
+                        <div class="recommendation-title">Вопросы для повторения</div>
+                        <div class="recommendation-message">
+                            Рекомендуем обратить особое внимание на следующие вопросы, где были допущены ошибки:
+                            <ul style="margin-top: 10px; padding-left: 20px;">
+                                <?php foreach ($weak_areas as $weak): ?>
+                                    <li><strong>Вопрос <?php echo $weak['question_number']; ?>:</strong> <?php echo htmlspecialchars(mb_substr($weak['question_text'], 0, 100)) . '...'; ?></li>
+                                <?php endforeach; ?>
+                            </ul>
+                        </div>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- Действия -->
+        <div class="actions-section">
+            <a href="take_test.php?id=<?php echo $result['test_id']; ?>" class="btn btn-success">
+                <i class="fas fa-redo"></i> Пройти тест еще раз
+            </a>
+            <a href="tests.php" class="btn btn-outline">
+                <i class="fas fa-list"></i> К списку тестов
+            </a>
+            <?php if ($user['role'] == 'student'): ?>
+                <a href="my_progress.php" class="btn btn-primary">
+                    <i class="fas fa-chart-line"></i> Мой прогресс
+                </a>
             <?php else: ?>
-                <div style="overflow-x: auto;">
-                    <table class="results-table">
-                        <thead>
-                            <tr>
-                                <th>Студент</th>
-                                <th>Email</th>
-                                <th>Баллы</th>
-                                <th>Процент</th>
-                                <th>Время</th>
-                                <th>Дата завершения</th>
-                                <th>Статус</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($results as $result): ?>
-                                <tr class="result-row">
-                                    <td>
-                                        <strong><?php echo htmlspecialchars($result['full_name']); ?></strong>
-                                    </td>
-                                    <td><?php echo htmlspecialchars($result['email']); ?></td>
-                                    <td>
-                                        <?php echo $result['score']; ?> / <?php echo $result['total_points']; ?>
-                                    </td>
-                                    <td>
-                                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                            <span><?php echo $result['percentage']; ?>%</span>
-                                            <div class="progress-bar">
-                                                <div class="progress-fill <?php echo $result['performance']; ?>" 
-                                                     style="width: <?php echo min($result['percentage'], 100); ?>%"></div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td><?php echo round($result['time_spent'] / 60, 1); ?> мин</td>
-                                    <td><?php echo date('d.m.Y H:i', strtotime($result['completed_at'])); ?></td>
-                                    <td>
-                                        <span class="badge badge-<?php echo $result['performance']; ?>">
-                                            <?php switch($result['performance']):
-                                                case 'excellent': echo 'Отлично'; break;
-                                                case 'good': echo 'Хорошо'; break;
-                                                case 'average': echo 'Удовлетворительно'; break;
-                                                case 'poor': echo 'Неудовлетворительно'; break;
-                                            endswitch; ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <a href="test_result_detail.php?result_id=<?php echo $result['id']; ?>" class="btn btn-primary btn-sm">
-                                            <i class="fas fa-eye"></i>
-                                            Подробнее
-                                        </a>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+                <a href="test_results.php?test_id=<?php echo $result['test_id']; ?>" class="btn btn-primary">
+                    <i class="fas fa-users"></i> Все результаты теста
+                </a>
             <?php endif; ?>
         </div>
     </div>
 
     <script>
-    function setFilter(filter) {
-        const url = new URL(window.location);
-        url.searchParams.set('filter', filter);
-        window.location.href = url.toString();
-    }
+        document.addEventListener('DOMContentLoaded', function() {
+            // Данные для графиков
+            const answersData = {
+                correct: <?php echo $correct_answers; ?>,
+                incorrect: <?php echo $total_questions - $correct_answers; ?>
+            };
 
-    function handleSearch(value) {
-        // Debounce поиска
-        clearTimeout(window.searchTimeout);
-        window.searchTimeout = setTimeout(() => {
-            const url = new URL(window.location);
-            if (value) {
-                url.searchParams.set('search', value);
-            } else {
-                url.searchParams.delete('search');
-            }
-            window.location.href = url.toString();
-        }, 500);
-    }
+            const typesData = {
+                labels: <?php echo json_encode(array_keys($question_types)); ?>,
+                datasets: [{
+                    label: 'Правильные ответы',
+                    data: <?php echo json_encode(array_column($question_types, 'correct')); ?>,
+                    backgroundColor: '#2ecc71'
+                }, {
+                    label: 'Всего вопросов',
+                    data: <?php echo json_encode(array_column($question_types, 'total')); ?>,
+                    backgroundColor: '#3498db'
+                }]
+            };
 
-    // Сортировка таблицы
-    document.addEventListener('DOMContentLoaded', function() {
-        const headers = document.querySelectorAll('.results-table th');
-        headers.forEach((header, index) => {
-            header.addEventListener('click', () => {
-                // Реализация сортировки может быть добавлена здесь
-                console.log('Sort by column:', index);
+            // График распределения ответов
+            const answersCtx = document.getElementById('answersChart').getContext('2d');
+            new Chart(answersCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Правильные ответы', 'Неправильные ответы'],
+                    datasets: [{
+                        data: [answersData.correct, answersData.incorrect],
+                        backgroundColor: ['#2ecc71', '#e74c3c'],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const value = context.raw;
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${context.label}: ${value} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // График по типам вопросов
+            const typesCtx = document.getElementById('typesChart').getContext('2d');
+            new Chart(typesCtx, {
+                type: 'bar',
+                data: typesData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Количество вопросов'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Типы вопросов'
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.raw}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Анимация прогресс-баров
+            const progressBars = document.querySelectorAll('.progress-fill');
+            progressBars.forEach(bar => {
+                const width = bar.style.width;
+                bar.style.width = '0';
+                setTimeout(() => {
+                    bar.style.width = width;
+                }, 800);
+            });
+
+            // Анимация появления элементов
+            const elements = document.querySelectorAll('.question-item, .stat-card, .recommendation-item');
+            elements.forEach((element, index) => {
+                element.style.opacity = '0';
+                element.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    element.style.transition = 'all 0.6s ease';
+                    element.style.opacity = '1';
+                    element.style.transform = 'translateY(0)';
+                }, index * 100);
+            });
+
+            // Подсветка неправильных ответов при наведении
+            const incorrectAnswers = document.querySelectorAll('.question-item.incorrect');
+            incorrectAnswers.forEach(item => {
+                item.addEventListener('mouseenter', function() {
+                    this.style.transform = 'scale(1.02)';
+                    this.style.boxShadow = '0 8px 25px rgba(231, 76, 60, 0.15)';
+                });
+                
+                item.addEventListener('mouseleave', function() {
+                    this.style.transform = 'scale(1)';
+                    this.style.boxShadow = 'none';
+                });
             });
         });
-    });
     </script>
 </body>
 </html>
