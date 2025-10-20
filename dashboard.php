@@ -158,15 +158,15 @@ if ($user['role'] == 'student') {
     
     // Последняя активность студентов
     $stmt = $pdo->prepare("
-        SELECT u.full_name, t.title, tr.score, tr.total_points, tr.percentage, tr.completed_at,
-               u.group_name
-        FROM test_results tr
-        JOIN users u ON tr.user_id = u.id
-        JOIN tests t ON tr.test_id = t.id
-        WHERE t.created_by = ?
-        ORDER BY tr.completed_at DESC
-        LIMIT 8
-    ");
+    SELECT u.full_name, u.avatar, t.title, tr.score, tr.total_points, tr.percentage, tr.completed_at,
+           u.group_name
+    FROM test_results tr
+    JOIN users u ON tr.user_id = u.id
+    JOIN tests t ON tr.test_id = t.id
+    WHERE t.created_by = ?
+    ORDER BY tr.completed_at DESC
+    LIMIT 8
+");
     $stmt->execute([$_SESSION['user_id']]);
     $student_activity = $stmt->fetchAll();
     
@@ -205,6 +205,22 @@ if (!empty($notifications)) {
         WHERE user_id = ? AND is_read = 0
     ");
     $stmt->execute([$_SESSION['user_id']]);
+}
+
+// Получаем непрочитанные сообщения
+$unread_messages_count = 0;
+try {
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) as unread_count 
+        FROM messages 
+        WHERE receiver_id = ? AND is_read = FALSE
+    ");
+    $stmt->execute([$_SESSION['user_id']]);
+    $result = $stmt->fetch();
+    $unread_messages_count = $result ? $result['unread_count'] : 0;
+} catch (PDOException $e) {
+    error_log("Error counting unread messages: " . $e->getMessage());
+    $unread_messages_count = 0;
 }
 ?>
 
@@ -594,11 +610,16 @@ if (!empty($notifications)) {
             color: var(--secondary);
             margin-bottom: 8px;
             font-weight: 700;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
         
         .welcome p {
             color: var(--gray);
             font-size: 16px;
+            font-style: italic;
         }
         
         .header-actions {
@@ -1062,7 +1083,7 @@ if (!empty($notifications)) {
             background-color: #f8f9fa;
         }
         
-        .user-avatar {
+        .user-avatar-small {
             width: 35px;
             height: 35px;
             border-radius: 50%;
@@ -1073,6 +1094,13 @@ if (!empty($notifications)) {
             color: white;
             font-weight: 600;
             font-size: 14px;
+            overflow: hidden;
+        }
+        
+        .user-avatar-small img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
         }
         
         .user-info {
@@ -1087,12 +1115,53 @@ if (!empty($notifications)) {
             position: relative;
         }
         
-        /* Notifications */
+        /* Notifications Panel */
+        .notifications-panel {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            width: 400px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+            overflow: hidden;
+        }
+
+        .notifications-panel.active {
+            display: block;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .notifications-header {
+            padding: 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--light);
+        }
+
+        .notifications-header h3 {
+            margin: 0;
+            color: var(--secondary);
+        }
+
         .notifications-list {
             max-height: 400px;
             overflow-y: auto;
-            
-            /* Скрываем скроллбар в уведомлениях */
             scrollbar-width: none;
             -ms-overflow-style: none;
         }
@@ -1243,133 +1312,300 @@ if (!empty($notifications)) {
             border: none;
         }
 
-        /* Модальные окна для AI ассистента и поиска */
-        .assistant-modal,
-        .search-modal {
+        /* Модальные окна для помощи и чата */
+        .help-modal,
+        .chat-modal {
             max-width: 500px;
         }
 
-        .assistant-chat {
-            height: 400px;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .chat-messages {
-            flex: 1;
-            overflow-y: auto;
+        .help-content {
             padding: 20px;
-            
-            /* Скрываем скроллбар в чате */
-            scrollbar-width: none;
-            -ms-overflow-style: none;
+            max-height: 60vh;
+            overflow-y: auto;
         }
 
-        .chat-messages::-webkit-scrollbar {
-            display: none;
+        .help-section {
+            margin-bottom: 20px;
         }
 
-        .message {
+        .help-section h3 {
+            color: var(--primary);
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .help-section p {
+            color: var(--gray);
+            line-height: 1.6;
+            margin-bottom: 10px;
+        }
+
+        .help-section ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .help-section li {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
             display: flex;
-            margin-bottom: 15px;
+            align-items: center;
             gap: 10px;
         }
 
-        .user-message {
-            justify-content: flex-end;
+        .help-section li i {
+            color: var(--primary);
         }
 
-        .message-avatar {
-            width: 30px;
-            height: 30px;
+        /* Модальные окна для чата */
+.chat-modal {
+    max-width: 90%;
+    width: 1200px;
+    height: 100vh;
+    max-height: 800px;
+}
+
+.chat-header {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+    padding: 20px;
+    border-radius: 15px 15px 0 0;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    height: calc(85vh - 140px);
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.chat-messages::-webkit-scrollbar {
+    display: none;
+}
+
+.message {
+    display: flex;
+    margin-bottom: 15px;
+    gap: 10px;
+}
+
+.user-message {
+    justify-content: flex-end;
+}
+
+.message-avatar {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+}
+
+.message-content {
+    max-width: 70%;
+    padding: 10px 15px;
+    border-radius: 15px;
+    background: var(--light);
+}
+
+.user-message .message-content {
+    background: var(--primary);
+    color: white;
+}
+
+.chat-input {
+    display: flex;
+    padding: 15px;
+    border-top: 1px solid #e0e0e0;
+    gap: 10px;
+    background: white;
+    border-radius: 0 0 15px 15px;
+}
+
+.chat-input input {
+    flex: 1;
+    padding: 10px 15px;
+    border: 1px solid #ddd;
+    border-radius: 20px;
+    outline: none;
+}
+
+.chat-input button {
+    background: var(--primary);
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.chat-input button:hover {
+    background: var(--primary-dark);
+}
+
+/* Адаптивность для чата */
+@media (max-width: 768px) {
+    .chat-modal {
+        max-width: 95%;
+        width: 95%;
+        height: 90vh;
+        max-height: none;
+    }
+    
+    .chat-messages {
+        height: calc(90vh - 140px);
+    }
+}
+        /* Main Hero Section */
+        .hero-section {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 40px;
+            border-radius: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -50%;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.1);
+            transform: rotate(30deg);
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero-section h1 {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+            font-weight: 700;
+        }
+
+        .hero-section p {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            opacity: 0.9;
+        }
+
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 30px;
+        }
+
+        .hero-stat {
+            text-align: center;
+        }
+
+        .hero-stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            display: block;
+        }
+
+        .hero-stat-label {
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        /* Quick Actions */
+        .quick-actions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .quick-action-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .quick-action-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+
+        .quick-action-icon {
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
-            background: var(--primary);
+            background: var(--light);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: white;
-            font-size: 12px;
+            margin: 0 auto 15px;
+            font-size: 24px;
+            color: var(--primary);
         }
 
-        .message-content {
-            max-width: 70%;
-            padding: 10px 15px;
-            border-radius: 15px;
-            background: var(--light);
+        .quick-action-card h3 {
+            margin-bottom: 10px;
+            color: var(--secondary);
         }
 
-        .user-message .message-content {
-            background: var(--primary);
-            color: white;
+        .quick-action-card p {
+            color: var(--gray);
+            font-size: 14px;
         }
 
-        .chat-input {
-            display: flex;
-            padding: 15px;
-            border-top: 1px solid #e0e0e0;
-            gap: 10px;
-        }
-
-        .chat-input input {
-            flex: 1;
-            padding: 10px 15px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            outline: none;
-        }
-
-        .chat-input button {
-            background: var(--primary);
-            color: white;
-            border: none;
-            width: 40px;
-            height: 40px;
+        /* Message Button */
+        .message-btn {
+            position: relative;
+            background: white;
+            width: 45px;
+            height: 45px;
             border-radius: 50%;
-            cursor: pointer;
-        }
-
-        .search-container {
-            padding: 20px;
-        }
-
-        .search-container input {
-            width: 100%;
-            padding: 12px 20px;
-            border: 1px solid #ddd;
-            border-radius: 25px;
-            outline: none;
-            font-size: 16px;
-        }
-
-        .search-results {
-            margin-top: 15px;
-            max-height: 300px;
-            overflow-y: auto;
-            
-            /* Скрываем скроллбар в результатах поиска */
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-        }
-
-        .search-results::-webkit-scrollbar {
-            display: none;
-        }
-
-        .search-result-item {
             display: flex;
             align-items: center;
-            gap: 12px;
-            padding: 10px;
-            border-bottom: 1px solid #f0f0f0;
+            justify-content: center;
             cursor: pointer;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            transition: all 0.3s;
         }
 
-        .search-result-item:hover {
-            background: var(--light);
+        .message-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
         }
 
-        .search-result-item i {
-            color: var(--primary);
+        .message-badge {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: var(--success);
+            color: white;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
         }
 
         /* ===== АНИМАЦИИ ===== */
@@ -1460,7 +1696,7 @@ if (!empty($notifications)) {
             }
             
             .modal-body {
-                height: 50vh;
+                height: 60vh;
             }
 
             .user-info {
@@ -1471,29 +1707,223 @@ if (!empty($notifications)) {
             .quick-actions {
                 flex-direction: column;
             }
+
+            .notifications-panel {
+                width: 95%;
+                right: 2.5%;
+            }
+
+            .hero-section {
+                padding: 30px 20px;
+            }
+
+            .hero-section h1 {
+                font-size: 2rem;
+            }
+
+            .hero-stats {
+                gap: 20px;
+            }
+
+            .quick-actions-grid {
+                grid-template-columns: 1fr;
+            }
         }
-</style>
+    </style>
 </head>
 <body>
     <!-- Подключаем меню -->
     <?php include 'sidebar_menu.php'; ?>
     
+    <!-- Панель уведомлений -->
+    <div class="notifications-panel" id="notificationsPanel">
+        <div class="notifications-header">
+            <h3><i class="fas fa-bell"></i> Уведомления</h3>
+            <button class="btn btn-primary" onclick="markAllAsRead()">Отметить все как прочитанные</button>
+        </div>
+        <div class="notifications-list">
+            <?php if (!empty($notifications)): ?>
+                <?php foreach ($notifications as $notification): ?>
+                    <div class="notification-item <?php echo $notification['is_read'] ? '' : 'unread'; ?>">
+                        <div class="notification-title"><?php echo htmlspecialchars($notification['title']); ?></div>
+                        <div class="notification-message"><?php echo htmlspecialchars($notification['message']); ?></div>
+                        <div class="notification-time">
+                            <i class="fas fa-clock"></i>
+                            <?php echo date('d.m.Y H:i', strtotime($notification['created_at'])); ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <div class="empty-state">
+                    <i class="fas fa-bell-slash"></i>
+                    <p>Нет новых уведомлений</p>
+                </div>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- Модальное окно помощи -->
+    <div class="modal-overlay" id="helpModal">
+        <div class="modal-content help-modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-question-circle"></i> Помощь</h2>
+                <button class="modal-close" onclick="closeHelpModal()">&times;</button>
+            </div>
+            <div class="help-content">
+                <div class="help-section">
+                    <h3>Как работать с системой</h3>
+                    <p>Система интеллектуальной оценки знаний предоставляет следующие возможности:</p>
+                    <ul>
+                        <li><i class="fas fa-play"></i> Прохождение тестов и оценка знаний</li>
+                        <li><i class="fas fa-chart-bar"></i> Просмотр статистики и прогресса</li>
+                        <li><i class="fas fa-comments"></i> Общение с преподавателями через чат</li>
+                        <li><i class="fas fa-bell"></i> Получение уведомлений о новых тестах</li>
+                    </ul>
+                </div>
+                
+                <div class="help-section">
+                    <h3>Часто задаваемые вопросы</h3>
+                    <p><strong>Как начать прохождение теста?</strong></p>
+                    <p>Перейдите в раздел "Доступные тесты" и нажмите кнопку "Начать тест".</p>
+                    
+                    <p><strong>Где посмотреть результаты?</strong></p>
+                    <p>Все результаты доступны в разделе "Результаты тестов".</p>
+                    
+                    <p><strong>Как связаться с преподавателем?</strong></p>
+                    <p>Используйте встроенный чат для общения с преподавателями.</p>
+                </div>
+                
+                <div class="help-section">
+                    <h3>Техническая поддержка</h3>
+                    <p>Если у вас возникли технические проблемы, обратитесь в службу поддержки:</p>
+                    <ul>
+                        <li><i class="fas fa-envelope"></i> Email: support@system.edu</li>
+                        <li><i class="fas fa-phone"></i> Телефон: +7 (XXX) XXX-XX-XX</li>
+                        <li><i class="fas fa-clock"></i> Время работы: Пн-Пт, 9:00-18:00</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно чата -->
+<div class="modal-overlay" id="chatModal">
+    <div class="modal-content chat-modal">
+        <div class="modal-header">
+            <h2><i class="fas fa-comments"></i> Чат с преподавателем</h2>
+            <button class="modal-close" onclick="closeChatModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <iframe src="messages.php" style="width:100%; height:100%; border:none;"></iframe>
+        </div>
+    </div>
+</div>
+
     <!-- Main Content -->
     <div class="main-content">
-        <div class="header">
-            <div class="welcome">
-                <h2>Добро пожаловать в систему интеллектуальной оценки знаний!</h2>
+        <!-- Hero Section -->
+        <div class="hero-section">
+            <div class="hero-content">
+                <h1>Добро пожаловать в систему интеллектуальной оценки знаний!</h1>
                 <?php
                 $nameParts = explode(' ', $user['full_name']);
                 $firstName = $nameParts[1] ?? $user['full_name'];
-                echo "<p>Рады видеть вас снова, $firstName! Готовы к новым достижениям?</p>";
+                echo "<p>Рады приветствовать вас снова, <strong>$firstName</strong>! Готовы покорять новые вершины знаний?</p>";
                 ?>
+                
+                <div class="hero-stats">
+                    <?php if ($user['role'] == 'student'): ?>
+                        <div class="hero-stat">
+                            <span class="hero-stat-number"><?php echo $stats['passed_tests']; ?></span>
+                            <span class="hero-stat-label">Пройдено тестов</span>
+                        </div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-number"><?php echo round($stats['avg_percentage'], 1); ?>%</span>
+                            <span class="hero-stat-label">Средний результат</span>
+                        </div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-number"><?php echo count($available_tests); ?></span>
+                            <span class="hero-stat-label">Доступно тестов</span>
+                        </div>
+                    <?php else: ?>
+                        <div class="hero-stat">
+                            <span class="hero-stat-number"><?php echo $stats['total_tests_created']; ?></span>
+                            <span class="hero-stat-label">Создано тестов</span>
+                        </div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-number"><?php echo $stats['total_students']; ?></span>
+                            <span class="hero-stat-label">Активных студентов</span>
+                        </div>
+                        <div class="hero-stat">
+                            <span class="hero-stat-number"><?php echo round($stats['avg_success_rate'], 1); ?>%</span>
+                            <span class="hero-stat-label">Успеваемость</span>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions-grid">
+            <div class="quick-action-card" onclick="openHelpModal()">
+                <div class="quick-action-icon">
+                    <i class="fas fa-question-circle"></i>
+                </div>
+                <h3>Помощь</h3>
+                <p>Руководство пользователя и FAQ</p>
+            </div>
+            
+            <div class="quick-action-card" onclick="openChatModal()">
+                <div class="quick-action-icon">
+                    <i class="fas fa-comments"></i>
+                </div>
+                <h3>Чат</h3>
+                <p>Общение с преподавателями</p>
+            </div>
+            
+            <?php if ($user['role'] == 'student'): ?>
+                <div class="quick-action-card" onclick="window.location.href='tests.php'">
+                    <div class="quick-action-icon">
+                        <i class="fas fa-play-circle"></i>
+                    </div>
+                    <h3>Начать тест</h3>
+                    <p>Приступить к прохождению</p>
+                </div>
+            <?php else: ?>
+                <div class="quick-action-card" onclick="window.location.href='create_test.php'">
+                    <div class="quick-action-icon">
+                        <i class="fas fa-plus-circle"></i>
+                    </div>
+                    <h3>Создать тест</h3>
+                    <p>Новое тестовое задание</p>
+                </div>
+            <?php endif; ?>
+            
+            <div class="quick-action-card" onclick="window.location.href='profile.php'">
+                <div class="quick-action-icon">
+                    <i class="fas fa-user-cog"></i>
+                </div>
+                <h3>Профиль</h3>
+                <p>Настройки учетной записи</p>
+            </div>
+        </div>
+        
+        <div class="header">
+            <div class="welcome">
+                <h2>Ваша учебная панель</h2>
+                <p>Здесь вы найдете всю необходимую информацию для эффективного обучения</p>
             </div>
             
             <div class="header-actions">
                 <div class="search-box">
                     <i class="fas fa-search"></i>
                     <input type="text" id="globalSearch" placeholder="Поиск тестов, материалов, студентов...">
+                </div>
+                <div class="message-btn" onclick="openChatModal()">
+                    <i class="fas fa-comments"></i>
+                    <?php if ($unread_messages_count > 0): ?>
+                        <span class="message-badge"><?php echo $unread_messages_count; ?></span>
+                    <?php endif; ?>
                 </div>
                 <div class="notification-bell" onclick="toggleNotifications()">
                     <i class="fas fa-bell"></i>
@@ -1503,28 +1933,6 @@ if (!empty($notifications)) {
                 </div>
             </div>
         </div>
-        
-       <!-- Уведомления -->
-<?php if (!empty($notifications)): ?>
-<div class="section" id="notificationsPanel" style="display: none;">
-    <div class="section-header">
-        <h2><i class="fas fa-bell"></i> Все уведомления</h2>
-        <button class="btn btn-primary" onclick="markAllAsRead()">Отметить все как прочитанные</button>
-    </div>
-    <div class="notifications-list">
-        <?php foreach ($notifications as $notification): ?>
-            <div class="notification-item <?php echo $notification['is_read'] ? '' : 'unread'; ?>">
-                <div class="notification-title"><?php echo htmlspecialchars($notification['title']); ?></div>
-                <div class="notification-message"><?php echo htmlspecialchars($notification['message']); ?></div>
-                <div class="notification-time">
-                    <i class="fas fa-clock"></i>
-                    <?php echo date('d.m.Y H:i', strtotime($notification['created_at'])); ?>
-                </div>
-            </div>
-        <?php endforeach; ?>
-    </div>
-</div>
-<?php endif; ?>
         
         <!-- Статистические карточки -->
         <div class="stats-cards">
@@ -1953,15 +2361,19 @@ if (!empty($notifications)) {
                             <tr>
                                 <td>
                                     <div class="user-info">
-                                        <div class="user-avatar">
-                                            <?php 
-                                            $firstName = $activity['full_name'];
-                                            if (function_exists('mb_convert_encoding')) {
-                                                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
-                                            }
-                                            $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
-                                            echo htmlspecialchars(strtoupper($firstLetter));
-                                            ?>
+                                        <div class="user-avatar-small">
+                                            <?php if (!empty($activity['avatar']) && file_exists('uploads/avatars/' . $activity['avatar'])): ?>
+                                                <img src="uploads/avatars/<?php echo htmlspecialchars($activity['avatar']); ?>" alt="<?php echo htmlspecialchars($activity['full_name']); ?>">
+                                            <?php else: ?>
+                                                <?php 
+                                                $firstName = $activity['full_name'];
+                                                if (function_exists('mb_convert_encoding')) {
+                                                    $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                                                }
+                                                $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+                                                echo htmlspecialchars(strtoupper($firstLetter));
+                                                ?>
+                                            <?php endif; ?>
                                         </div>
                                         <?php echo htmlspecialchars($activity['full_name']); ?>
                                     </div>
@@ -2014,7 +2426,7 @@ if (!empty($notifications)) {
 function toggleNotifications() {
     const panel = document.getElementById('notificationsPanel');
     if (panel) {
-        panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        panel.classList.toggle('active');
     }
 }
 
@@ -2035,12 +2447,64 @@ function markAllAsRead() {
             if (badge) {
                 badge.style.display = 'none';
             }
+            // Закрываем панель уведомлений
+            document.getElementById('notificationsPanel').classList.remove('active');
         }
     })
     .catch(error => {
         console.error('Error:', error);
     });
 }
+
+// Модальные окна
+function openHelpModal() {
+    document.getElementById('helpModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeHelpModal() {
+    document.getElementById('helpModal').classList.remove('active');
+    document.body.style.overflow = 'auto';
+}
+
+function openChatModal() {
+    document.getElementById('chatModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeChatModal() {
+    document.getElementById('chatModal').classList.remove('active');
+    document.body.style.overflow = 'auto';
+}
+
+// Закрытие модальных окон при клике вне их
+document.addEventListener('click', function(e) {
+    const helpModal = document.getElementById('helpModal');
+    const chatModal = document.getElementById('chatModal');
+    const notificationsPanel = document.getElementById('notificationsPanel');
+    
+    if (helpModal && helpModal.classList.contains('active') && e.target === helpModal) {
+        closeHelpModal();
+    }
+    
+    if (chatModal && chatModal.classList.contains('active') && e.target === chatModal) {
+        closeChatModal();
+    }
+    
+    if (notificationsPanel && !notificationsPanel.contains(e.target) && 
+        !e.target.closest('.notification-bell')) {
+        notificationsPanel.classList.remove('active');
+    }
+});
+
+// Закрытие по ESC
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeHelpModal();
+        closeChatModal();
+        document.getElementById('notificationsPanel').classList.remove('active');
+    }
+});
 
 // Управление модальным окном для преподавателей
 document.addEventListener('DOMContentLoaded', function() {
@@ -2090,19 +2554,19 @@ document.addEventListener('DOMContentLoaded', function() {
     
     if (updatedModalClose) {
         updatedModalClose.addEventListener('click', function() {
-            closeModal();
+            closeTestModal();
         });
     }
     
     if (updatedModal) {
         updatedModal.addEventListener('click', function(e) {
             if (e.target === updatedModal) {
-                closeModal();
+                closeTestModal();
             }
         });
     }
     
-    function closeModal() {
+    function closeTestModal() {
         const modal = document.getElementById('testModal');
         if (modal) {
             modal.classList.remove('active');
@@ -2115,13 +2579,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }, 300);
         }
     }
-    
-    // Закрытие по ESC
-    document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            closeModal();
-        }
-    });
 });
 
 // Инициализация графиков
@@ -2246,7 +2703,7 @@ document.getElementById('globalSearch').addEventListener('input', function() {
 // Анимация при загрузке
 document.addEventListener('DOMContentLoaded', function() {
     // Анимация появления элементов
-    const cards = document.querySelectorAll('.stat-card, .test-item, .section');
+    const cards = document.querySelectorAll('.stat-card, .test-item, .section, .quick-action-card');
     cards.forEach((card, index) => {
         card.style.opacity = '0';
         card.style.transform = 'translateY(20px)';

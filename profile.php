@@ -310,11 +310,20 @@ $unread_count = $stmt->fetch()['unread_count'];
             overflow: hidden;
         }
 
-        .user-avatar img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+     /* Добавьте эти стили в CSS секцию dashboard.php */
+.user-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+/* Для маленьких аватарок в таблице */
+.activity-table .user-avatar img {
+    width: 35px;
+    height: 35px;
+    object-fit: cover;
+}
 
         .user-details h3 {
             font-size: 16px;
@@ -852,31 +861,31 @@ $unread_count = $stmt->fetch()['unread_count'];
         </div>
 
         <div class="user-info">
-            <div class="user-avatar">
-                <?php 
-                $avatarPath = !empty($user['avatar']) ? $user['avatar'] : 'default-avatar.png';
-                
-                if (file_exists($avatarPath)) {
-                    echo '<img src="' . $avatarPath . '" alt="Аватар">';
-                } else {
-                    $firstName = $user['full_name'];
-                    if (function_exists('mb_convert_encoding')) {
-                        $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
-                    }
-                    $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
-                    echo htmlspecialchars(strtoupper($firstLetter));
-                }
-                ?>
-            </div>
-            <div class="user-details">
-                <h3><?php echo htmlspecialchars($user['full_name']); ?></h3>
-                <p><?php echo htmlspecialchars($user['email']); ?></p>
-                <span class="role-badge role-<?php echo $user['role']; ?>">
-                    <?php echo $user['role'] == 'teacher' ? 'Преподаватель' : 
-                           ($user['role'] == 'admin' ? 'Администратор' : 'Студент'); ?>
-                </span>
-            </div>
-        </div>
+    <div class="user-avatar">
+        <?php 
+        $avatarPath = !empty($user['avatar']) ? $user['avatar'] : 'default-avatar.png';
+        
+        if (file_exists($avatarPath) && $user['avatar'] != 'default-avatar.png') {
+            echo '<img src="' . $avatarPath . '" alt="Аватар">';
+        } else {
+            $firstName = $user['full_name'];
+            if (function_exists('mb_convert_encoding')) {
+                $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+            }
+            $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+            echo htmlspecialchars(strtoupper($firstLetter));
+        }
+        ?>
+    </div>
+    <div class="user-details">
+        <h3><?php echo htmlspecialchars($user['full_name']); ?></h3>
+        <p><?php echo htmlspecialchars($user['email']); ?></p>
+        <span class="role-badge role-<?php echo $user['role']; ?>">
+            <?php echo $user['role'] == 'teacher' ? 'Преподаватель' : 
+                   ($user['role'] == 'admin' ? 'Администратор' : 'Студент'); ?>
+        </span>
+    </div>
+</div>
 
         <div class="quick-stats">
             <div class="stat-item">
