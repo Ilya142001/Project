@@ -91,6 +91,19 @@ if ($user['role'] == 'student') {
     $stmt->execute([$_SESSION['user_id']]);
     $upcoming_deadlines = $stmt->fetchAll();
     
+   // Учебные материалы (ИСПРАВЛЕННЫЙ ЗАПРОС)
+$stmt = $pdo->prepare("
+    SELECT m.*, mc.name as category_name, mc.icon as category_icon,
+           (SELECT COUNT(*) FROM material_views WHERE material_id = m.id AND user_id = ?) as viewed
+    FROM materials m
+    LEFT JOIN material_categories mc ON m.category_id = mc.id
+    WHERE m.is_active = 1
+    ORDER BY m.created_at DESC
+    LIMIT 6
+");
+$stmt->execute([$_SESSION['user_id']]);
+$learning_materials = $stmt->fetchAll();
+    
 } else if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
     // Статистика для преподавателя/администратора
     $stmt = $pdo->prepare("
@@ -1116,99 +1129,338 @@ try {
         }
         
         /* Notifications Panel */
-        .notifications-panel {
-            position: fixed;
-            top: 80px;
-            right: 20px;
-            width: 400px;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            z-index: 1000;
-            display: none;
-            overflow: hidden;
-        }
+        /* Improved Notifications Panel */
+.notifications-panel {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    width: 420px;
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    z-index: 1000;
+    display: none;
+    overflow: hidden;
+    border: 1px solid #e0e0e0;
+    backdrop-filter: blur(10px);
+}
 
-        .notifications-panel.active {
-            display: block;
-            animation: slideIn 0.3s ease;
-        }
+.notifications-panel.active {
+    display: block;
+    animation: slideInDown 0.3s ease;
+}
 
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
+@keyframes slideInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
 
-        .notifications-header {
-            padding: 20px;
-            border-bottom: 1px solid #e0e0e0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--light);
-        }
+.notifications-header {
+    padding: 25px 30px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
 
-        .notifications-header h3 {
-            margin: 0;
-            color: var(--secondary);
-        }
+.notifications-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
 
-        .notifications-list {
-            max-height: 400px;
-            overflow-y: auto;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-        }
+.notifications-header h3 i {
+    font-size: 16px;
+}
 
-        .notifications-list::-webkit-scrollbar {
-            display: none;
-        }
-        
-        .notification-item {
-            padding: 15px;
-            border-left: 3px solid var(--primary);
-            background: #f8f9fa;
-            margin-bottom: 10px;
-            border-radius: 8px;
-            transition: all 0.3s;
-        }
-        
-        .notification-item:hover {
-            background: #e9ecef;
-            transform: translateX(5px);
-        }
-        
-        .notification-item.unread {
-            background: white;
-            border-left-color: var(--accent);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        
-        .notification-title {
-            font-weight: 600;
-            margin-bottom: 5px;
-            color: var(--secondary);
-        }
-        
-        .notification-message {
-            font-size: 14px;
-            color: var(--gray);
-            margin-bottom: 8px;
-        }
-        
-        .notification-time {
-            font-size: 12px;
-            color: var(--gray);
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
+.notifications-header .btn {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    padding: 8px 16px;
+    font-size: 12px;
+    border-radius: 20px;
+    transition: all 0.3s;
+}
+
+.notifications-header .btn:hover {
+    background: rgba(255,255,255,0.3);
+    transform: translateY(-1px);
+}
+
+.notifications-list {
+    max-height: 500px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) #f0f0f0;
+}
+
+.notifications-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notifications-list::-webkit-scrollbar-track {
+    background: #f0f0f0;
+    border-radius: 3px;
+}
+
+.notifications-list::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 3px;
+}
+
+.notifications-list::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-dark);
+}
+
+.notification-item {
+    padding: 20px 25px;
+    border-left: 4px solid transparent;
+    background: white;
+    transition: all 0.3s;
+    position: relative;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.notification-item:last-child {
+    border-bottom: none;
+}
+
+.notification-item:hover {
+    background: #f8f9fa;
+    transform: translateX(5px);
+}
+
+.notification-item.unread {
+    background: linear-gradient(135deg, #f8f9fa, #ffffff);
+    border-left-color: var(--primary);
+    box-shadow: 0 2px 8px rgba(52, 152, 219, 0.1);
+}
+
+.notification-item.unread::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background: var(--primary);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(52, 152, 219, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(52, 152, 219, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(52, 152, 219, 0);
+    }
+}
+
+.notification-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+.notification-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--secondary);
+    line-height: 1.3;
+    flex: 1;
+    margin-right: 10px;
+}
+
+.notification-type {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.notification-type.info {
+    background: rgba(52, 152, 219, 0.1);
+    color: var(--primary);
+}
+
+.notification-type.success {
+    background: rgba(46, 204, 113, 0.1);
+    color: var(--success);
+}
+
+.notification-type.warning {
+    background: rgba(243, 156, 18, 0.1);
+    color: var(--warning);
+}
+
+.notification-type.danger {
+    background: rgba(231, 76, 60, 0.1);
+    color: var(--danger);
+}
+
+.notification-message {
+    font-size: 13px;
+    color: var(--gray);
+    line-height: 1.4;
+    margin-bottom: 10px;
+}
+
+.notification-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--gray);
+}
+
+.notification-time {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.notification-time i {
+    font-size: 10px;
+}
+
+.notification-actions {
+    display: flex;
+    gap: 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.notification-item:hover .notification-actions {
+    opacity: 1;
+}
+
+.notification-action {
+    background: none;
+    border: none;
+    color: var(--gray);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.3s;
+    font-size: 10px;
+}
+
+.notification-action:hover {
+    color: var(--primary);
+    background: rgba(52, 152, 219, 0.1);
+}
+
+.notifications-empty {
+    padding: 50px 30px;
+    text-align: center;
+    color: var(--gray);
+}
+
+.notifications-empty i {
+    font-size: 48px;
+    margin-bottom: 15px;
+    opacity: 0.5;
+    display: block;
+}
+
+.notifications-empty h4 {
+    font-size: 16px;
+    margin-bottom: 8px;
+    color: var(--secondary);
+}
+
+.notifications-empty p {
+    font-size: 14px;
+    opacity: 0.8;
+}
+
+/* Notification categories */
+.notification-categories {
+    display: flex;
+    padding: 15px 25px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    gap: 8px;
+}
+
+.notification-category {
+    padding: 6px 12px;
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 15px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+    color: var(--gray);
+}
+
+.notification-category.active,
+.notification-category:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .notifications-panel {
+        width: 95%;
+        right: 2.5%;
+        top: 70px;
+    }
+    
+    .notifications-header {
+        padding: 20px;
+    }
+    
+    .notification-item {
+        padding: 15px 20px;
+    }
+    
+    .notification-categories {
+        padding: 12px 20px;
+        flex-wrap: wrap;
+    }
+    
+    .notification-actions {
+        opacity: 1; /* Always show actions on mobile */
+    }
+}
+
+@media (max-width: 480px) {
+    .notifications-panel {
+        width: 100%;
+        right: 0;
+        border-radius: 0;
+        top: 0;
+        height: 100vh;
+    }
+    
+    .notifications-list {
+        max-height: calc(100vh - 140px);
+    }
+}
         
         /* Empty States */
         .empty-state {
@@ -1357,219 +1609,384 @@ try {
             color: var(--primary);
         }
 
-        /* Модальные окна для чата */
-.chat-modal {
-    max-width: 90%;
-    width: 1200px;
-    height: 100vh;
-    max-height: 800px;
-}
+        /* FAQ Accordion */
+        .faq-accordion {
+            margin-top: 20px;
+        }
 
-.chat-header {
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-    color: white;
-    padding: 20px;
-    border-radius: 15px 15px 0 0;
-}
-
-.chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    height: calc(85vh - 140px);
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-}
-
-.chat-messages::-webkit-scrollbar {
-    display: none;
-}
-
-.message {
-    display: flex;
-    margin-bottom: 15px;
-    gap: 10px;
-}
-
-.user-message {
-    justify-content: flex-end;
-}
-
-.message-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 12px;
-}
-
-.message-content {
-    max-width: 70%;
-    padding: 10px 15px;
-    border-radius: 15px;
-    background: var(--light);
-}
-
-.user-message .message-content {
-    background: var(--primary);
-    color: white;
-}
-
-.chat-input {
-    display: flex;
-    padding: 15px;
-    border-top: 1px solid #e0e0e0;
-    gap: 10px;
-    background: white;
-    border-radius: 0 0 15px 15px;
-}
-
-.chat-input input {
-    flex: 1;
-    padding: 10px 15px;
-    border: 1px solid #ddd;
-    border-radius: 20px;
-    outline: none;
-}
-
-.chat-input button {
-    background: var(--primary);
-    color: white;
-    border: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-
-.chat-input button:hover {
-    background: var(--primary-dark);
-}
-
-/* Адаптивность для чата */
-@media (max-width: 768px) {
-    .chat-modal {
-        max-width: 95%;
-        width: 95%;
-        height: 90vh;
-        max-height: none;
-    }
-    
-    .chat-messages {
-        height: calc(90vh - 140px);
-    }
-}
-        /* Main Hero Section */
-        .hero-section {
-            background: linear-gradient(135deg, var(--primary), var(--secondary));
-            color: white;
-            padding: 40px;
-            border-radius: 20px;
-            margin-bottom: 30px;
-            text-align: center;
-            position: relative;
+        .faq-item {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            margin-bottom: 10px;
             overflow: hidden;
         }
 
-        .hero-section::before {
-            content: '';
-            position: absolute;
-            top: -50%;
-            right: -50%;
-            width: 100%;
-            height: 100%;
-            background: rgba(255,255,255,0.1);
-            transform: rotate(30deg);
-        }
-
-        .hero-content {
-            position: relative;
-            z-index: 1;
-        }
-
-        .hero-section h1 {
-            font-size: 2.5rem;
-            margin-bottom: 15px;
-            font-weight: 700;
-        }
-
-        .hero-section p {
-            font-size: 1.2rem;
-            margin-bottom: 25px;
-            opacity: 0.9;
-        }
-
-        .hero-stats {
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            margin-top: 30px;
-        }
-
-        .hero-stat {
-            text-align: center;
-        }
-
-        .hero-stat-number {
-            font-size: 2rem;
-            font-weight: 700;
-            display: block;
-        }
-
-        .hero-stat-label {
-            font-size: 0.9rem;
-            opacity: 0.8;
-        }
-
-        /* Quick Actions */
-        .quick-actions-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .quick-action-card {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-            transition: all 0.3s;
-            cursor: pointer;
-        }
-
-        .quick-action-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
-        }
-
-        .quick-action-icon {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
+        .faq-question {
+            padding: 15px 20px;
             background: var(--light);
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            color: var(--secondary);
+            transition: background 0.3s;
+        }
+
+        .faq-question:hover {
+            background: #e9ecef;
+        }
+
+        .faq-question.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .faq-answer {
+            padding: 0;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .faq-answer.active {
+            padding: 20px;
+            max-height: 500px;
+        }
+
+        .faq-answer p {
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+        .faq-toggle {
+            transition: transform 0.3s;
+        }
+
+        .faq-question.active .faq-toggle {
+            transform: rotate(180deg);
+        }
+
+        /* Модальные окна для чата */
+        .chat-modal {
+            max-width: 90%;
+            width: 1200px;
+            height: 90vh;
+            max-height: 800px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 20px;
+            border-radius: 15px 15px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-header h2 {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .chat-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .chat-sidebar {
+            width: 300px;
+            background: #f8f9fa;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+        }
+
+        .chat-contacts {
+            padding: 15px;
+        }
+
+        .chat-contact {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-bottom: 8px;
+        }
+
+        .chat-contact:hover {
+            background: #e9ecef;
+        }
+
+        .chat-contact.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        .chat-contact-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--primary);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin: 0 auto 15px;
-            font-size: 24px;
-            color: var(--primary);
+            color: white;
+            font-weight: 600;
+            margin-right: 12px;
+            overflow: hidden;
         }
 
-        .quick-action-card h3 {
+        .chat-contact-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .chat-contact-info h4 {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .chat-contact-info p {
+            margin: 2px 0 0;
+            font-size: 12px;
+            opacity: 0.7;
+        }
+
+        .chat-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+        }
+
+        .chat-messages::-webkit-scrollbar {
+            display: none;
+        }
+
+        .message {
+            display: flex;
+            gap: 10px;
+            max-width: 70%;
+        }
+
+        .message.received {
+            align-self: flex-start;
+        }
+
+        .message.sent {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            flex-shrink: 0;
+            overflow: hidden;
+        }
+
+        .message-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 18px;
+            background: #f1f3f5;
+            position: relative;
+        }
+
+        .message.sent .message-content {
+            background: var(--primary);
+            color: white;
+        }
+
+        .message-text {
+            margin: 0;
+            line-height: 1.4;
+        }
+
+        .message-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .chat-input-container {
+            padding: 20px;
+            border-top: 1px solid #e0e0e0;
+            background: white;
+            border-radius: 0 0 15px 15px;
+        }
+
+        .chat-input {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .chat-input textarea {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            outline: none;
+            resize: none;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.4;
+            max-height: 120px;
+        }
+
+        .chat-input button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .chat-input button:hover {
+            background: var(--primary-dark);
+        }
+
+        .chat-input button:disabled {
+            background: var(--gray);
+            cursor: not-allowed;
+        }
+
+        /* Learning Materials */
+        .materials-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .material-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+            transition: all 0.3s;
+            border: 1px solid #e0e0e0;
+        }
+
+        .material-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .material-header {
+            padding: 20px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .material-type {
+            display: inline-block;
+            padding: 4px 12px;
+            background: var(--primary);
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
             margin-bottom: 10px;
+        }
+
+        .material-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
             color: var(--secondary);
         }
 
-        .quick-action-card p {
+        .material-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
             color: var(--gray);
+        }
+
+        .material-body {
+            padding: 15px 20px;
+        }
+
+        .material-description {
             font-size: 14px;
+            color: var(--gray);
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+
+        .material-footer {
+            padding: 15px 20px;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .material-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .material-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: var(--light);
+        }
+
+        .status-new {
+            background: var(--success);
+            color: white;
+        }
+
+        .status-viewed {
+            background: var(--gray);
+            color: white;
         }
 
         /* Message Button */
@@ -1637,6 +2054,11 @@ try {
             .sidebar-column {
                 order: -1;
             }
+
+            .chat-modal {
+                width: 95%;
+                height: 95vh;
+            }
         }
         
         @media (max-width: 992px) {
@@ -1655,6 +2077,17 @@ try {
 
             .main-content {
                 margin-left: 0;
+            }
+
+            .chat-container {
+                flex-direction: column;
+            }
+
+            .chat-sidebar {
+                width: 100%;
+                height: 200px;
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
             }
         }
         
@@ -1728,7 +2161,145 @@ try {
             .quick-actions-grid {
                 grid-template-columns: 1fr;
             }
+
+            .materials-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .message {
+                max-width: 85%;
+            }
+
+            .chat-modal {
+                width: 100%;
+                height: 100vh;
+                max-height: none;
+                border-radius: 0;
+            }
         }
+
+        @media (max-width: 480px) {
+            .header-actions {
+                flex-wrap: wrap;
+            }
+            
+            .search-box {
+                order: 3;
+                margin-top: 10px;
+            }
+        }
+
+        /* Hero Section Styles */
+.hero-section {
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    padding: 40px;
+    border-radius: 20px;
+    margin-bottom: 30px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-section::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 100%;
+    height: 100%;
+    background: rgba(255,255,255,0.1);
+    transform: rotate(30deg);
+}
+
+.hero-content {
+    position: relative;
+    z-index: 1;
+}
+
+.hero-section h1 {
+    font-size: 2.5rem;
+    margin-bottom: 15px;
+    font-weight: 700;
+}
+
+.hero-section p {
+    font-size: 1.2rem;
+    margin-bottom: 25px;
+    opacity: 0.9;
+}
+
+.hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-top: 30px;
+    flex-wrap: wrap;
+}
+
+.hero-stat {
+    text-align: center;
+}
+
+.hero-stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    display: block;
+}
+
+.hero-stat-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+/* Quick Actions Grid */
+.quick-actions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.quick-action-card {
+    background: white;
+    padding: 25px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    transition: all 0.3s;
+    cursor: pointer;
+    border: 1px solid #f0f0f0;
+}
+
+.quick-action-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+}
+
+.quick-action-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: var(--light);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 15px;
+    font-size: 24px;
+    color: var(--primary);
+}
+
+.quick-action-card h3 {
+    margin-bottom: 10px;
+    color: var(--secondary);
+    font-size: 1.1rem;
+}
+
+.quick-action-card p {
+    color: var(--gray);
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
     </style>
 </head>
 <body>
@@ -1736,31 +2307,80 @@ try {
     <?php include 'sidebar_menu.php'; ?>
     
     <!-- Панель уведомлений -->
-    <div class="notifications-panel" id="notificationsPanel">
-        <div class="notifications-header">
-            <h3><i class="fas fa-bell"></i> Уведомления</h3>
-            <button class="btn btn-primary" onclick="markAllAsRead()">Отметить все как прочитанные</button>
-        </div>
-        <div class="notifications-list">
-            <?php if (!empty($notifications)): ?>
-                <?php foreach ($notifications as $notification): ?>
-                    <div class="notification-item <?php echo $notification['is_read'] ? '' : 'unread'; ?>">
+    <!-- Панель уведомлений -->
+<div class="notifications-panel" id="notificationsPanel">
+    <div class="notifications-header">
+        <h3><i class="fas fa-bell"></i> Уведомления</h3>
+        <button class="btn" onclick="markAllAsRead()">
+            <i class="fas fa-check-double"></i> Прочитать все
+        </button>
+    </div>
+    
+    <div class="notification-categories">
+        <div class="notification-category active" data-category="all">Все</div>
+        <div class="notification-category" data-category="system">Система</div>
+        <div class="notification-category" data-category="tests">Тесты</div>
+        <div class="notification-category" data-category="materials">Материалы</div>
+    </div>
+    
+    <div class="notifications-list">
+        <?php if (!empty($notifications)): ?>
+            <?php foreach ($notifications as $notification): 
+                // Определяем тип уведомления для стилизации
+                $type = 'info';
+                if (stripos($notification['title'], 'тест') !== false) $type = 'success';
+                if (stripos($notification['title'], 'ошибка') !== false) $type = 'danger';
+                if (stripos($notification['title'], 'внимание') !== false) $type = 'warning';
+            ?>
+                <div class="notification-item <?php echo $notification['is_read'] ? '' : 'unread'; ?>" data-type="<?php echo $type; ?>">
+                    <div class="notification-header">
                         <div class="notification-title"><?php echo htmlspecialchars($notification['title']); ?></div>
-                        <div class="notification-message"><?php echo htmlspecialchars($notification['message']); ?></div>
+                        <span class="notification-type <?php echo $type; ?>">
+                            <?php 
+                            switch($type) {
+                                case 'success': echo 'Тест'; break;
+                                case 'warning': echo 'Важно'; break;
+                                case 'danger': echo 'Ошибка'; break;
+                                default: echo 'Система'; break;
+                            }
+                            ?>
+                        </span>
+                    </div>
+                    <div class="notification-message"><?php echo htmlspecialchars($notification['message']); ?></div>
+                    <div class="notification-footer">
                         <div class="notification-time">
                             <i class="fas fa-clock"></i>
-                            <?php echo date('d.m.Y H:i', strtotime($notification['created_at'])); ?>
+                            <?php 
+                            $timeAgo = time() - strtotime($notification['created_at']);
+                            if ($timeAgo < 3600) {
+                                echo ceil($timeAgo / 60) . ' мин назад';
+                            } elseif ($timeAgo < 86400) {
+                                echo ceil($timeAgo / 3600) . ' ч назад';
+                            } else {
+                                echo date('d.m.Y H:i', strtotime($notification['created_at']));
+                            }
+                            ?>
+                        </div>
+                        <div class="notification-actions">
+                            <button class="notification-action" onclick="markNotificationAsRead(<?php echo $notification['id']; ?>, this)">
+                                <i class="fas fa-check"></i>
+                            </button>
+                            <button class="notification-action" onclick="deleteNotification(<?php echo $notification['id']; ?>, this)">
+                                <i class="fas fa-trash"></i>
+                            </button>
                         </div>
                     </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <div class="empty-state">
-                    <i class="fas fa-bell-slash"></i>
-                    <p>Нет новых уведомлений</p>
                 </div>
-            <?php endif; ?>
-        </div>
+            <?php endforeach; ?>
+        <?php else: ?>
+            <div class="notifications-empty">
+                <i class="fas fa-bell-slash"></i>
+                <h4>Нет уведомлений</h4>
+                <p>Здесь будут появляться важные сообщения системы</p>
+            </div>
+        <?php endif; ?>
     </div>
+</div>
 
     <!-- Модальное окно помощи -->
     <div class="modal-overlay" id="helpModal">
@@ -1783,14 +2403,47 @@ try {
                 
                 <div class="help-section">
                     <h3>Часто задаваемые вопросы</h3>
-                    <p><strong>Как начать прохождение теста?</strong></p>
-                    <p>Перейдите в раздел "Доступные тесты" и нажмите кнопку "Начать тест".</p>
-                    
-                    <p><strong>Где посмотреть результаты?</strong></p>
-                    <p>Все результаты доступны в разделе "Результаты тестов".</p>
-                    
-                    <p><strong>Как связаться с преподавателем?</strong></p>
-                    <p>Используйте встроенный чат для общения с преподавателями.</p>
+                    <div class="faq-accordion">
+                        <div class="faq-item">
+                            <div class="faq-question">
+                                Как начать прохождение теста?
+                                <i class="fas fa-chevron-down faq-toggle"></i>
+                            </div>
+                            <div class="faq-answer">
+                                <p>Перейдите в раздел "Доступные тесты" и нажмите кнопку "Начать тест".</p>
+                            </div>
+                        </div>
+                        
+                        <div class="faq-item">
+                            <div class="faq-question">
+                                Где посмотреть результаты?
+                                <i class="fas fa-chevron-down faq-toggle"></i>
+                            </div>
+                            <div class="faq-answer">
+                                <p>Все результаты доступны в разделе "Результаты тестов".</p>
+                            </div>
+                        </div>
+                        
+                        <div class="faq-item">
+                            <div class="faq-question">
+                                Как связаться с преподавателем?
+                                <i class="fas fa-chevron-down faq-toggle"></i>
+                            </div>
+                            <div class="faq-answer">
+                                <p>Используйте встроенный чат для общения с преподавателями.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="faq-item">
+                            <div class="faq-question">
+                                Что делать если тест не загружается?
+                                <i class="fas fa-chevron-down faq-toggle"></i>
+                            </div>
+                            <div class="faq-answer">
+                                <p>Проверьте подключение к интернету и обновите страницу. Если проблема сохраняется, обратитесь в техническую поддержку.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="help-section">
@@ -1807,17 +2460,93 @@ try {
     </div>
 
     <!-- Модальное окно чата -->
-<div class="modal-overlay" id="chatModal">
-    <div class="modal-content chat-modal">
-        <div class="modal-header">
-            <h2><i class="fas fa-comments"></i> Чат с преподавателем</h2>
-            <button class="modal-close" onclick="closeChatModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-            <iframe src="messages.php" style="width:100%; height:100%; border:none;"></iframe>
+    <div class="modal-overlay" id="chatModal">
+        <div class="modal-content chat-modal">
+            <div class="modal-header">
+                <h2><i class="fas fa-comments"></i> Чат с преподавателем</h2>
+                <button class="modal-close" onclick="closeChatModal()">&times;</button>
+            </div>
+            <div class="chat-container">
+                <div class="chat-sidebar">
+                    <div class="chat-contacts">
+                        <div class="chat-contact active">
+                            <div class="chat-contact-avatar">
+                                <i class="fas fa-user-tie"></i>
+                            </div>
+                            <div class="chat-contact-info">
+                                <h4>Иванов А.С.</h4>
+                                <p>Математика</p>
+                            </div>
+                        </div>
+                        <div class="chat-contact">
+                            <div class="chat-contact-avatar">
+                                <i class="fas fa-user-tie"></i>
+                            </div>
+                            <div class="chat-contact-info">
+                                <h4>Петрова М.И.</h4>
+                                <p>Физика</p>
+                            </div>
+                        </div>
+                        <div class="chat-contact">
+                            <div class="chat-contact-avatar">
+                                <i class="fas fa-user-tie"></i>
+                            </div>
+                            <div class="chat-contact-info">
+                                <h4>Сидоров В.П.</h4>
+                                <p>Программирование</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-main">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message received">
+                            <div class="message-avatar">
+                                <i class="fas fa-user-tie"></i>
+                            </div>
+                            <div class="message-content">
+                                <p class="message-text">Добрый день! Есть вопросы по материалу?</p>
+                                <div class="message-time">14:30</div>
+                            </div>
+                        </div>
+                        <div class="message sent">
+                            <div class="message-avatar">
+                                <?php 
+                                $firstName = $user['full_name'];
+                                if (function_exists('mb_convert_encoding')) {
+                                    $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                                }
+                                $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+                                echo htmlspecialchars(strtoupper($firstLetter));
+                                ?>
+                            </div>
+                            <div class="message-content">
+                                <p class="message-text">Здравствуйте! Да, у меня вопрос по последней теме</p>
+                                <div class="message-time">14:32</div>
+                            </div>
+                        </div>
+                        <div class="message received">
+                            <div class="message-avatar">
+                                <i class="fas fa-user-tie"></i>
+                            </div>
+                            <div class="message-content">
+                                <p class="message-text">Какой именно вопрос у вас возник?</p>
+                                <div class="message-time">14:33</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-container">
+                        <div class="chat-input">
+                            <textarea id="messageInput" placeholder="Введите сообщение..." rows="1"></textarea>
+                            <button id="sendMessageBtn">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
-</div>
 
     <!-- Main Content -->
     <div class="main-content">
@@ -2090,6 +2819,55 @@ try {
                                 <div class="empty-state">
                                     <i class="fas fa-inbox"></i>
                                     <p>Пока нет доступных тестов. Обратитесь к преподавателю.</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                    
+                    <!-- Учебные материалы для студентов -->
+                    <div class="section">
+                        <div class="section-header">
+                            <h2><i class="fas fa-book-open"></i> Учебные материалы</h2>
+                            <a href="study_materials.php" class="view-all">
+                                Все материалы <i class="fas fa-arrow-right"></i>
+                            </a>
+                        </div>
+                        
+                        <div class="materials-grid">
+                            <?php if (count($learning_materials) > 0): ?>
+                                <?php foreach ($learning_materials as $material): ?>
+                                    <div class="material-card">
+                                        <div class="material-header">
+                                            <span class="material-type"><?php echo htmlspecialchars($material['type'] ?? 'PDF'); ?></span>
+                                            <h3 class="material-title"><?php echo htmlspecialchars($material['title']); ?></h3>
+                                            <div class="material-meta">
+                                                <span><?php echo htmlspecialchars($material['author_name']); ?></span>
+                                                <span><?php echo date('d.m.Y', strtotime($material['created_at'])); ?></span>
+                                            </div>
+                                        </div>
+                                        <div class="material-body">
+                                            <p class="material-description"><?php echo htmlspecialchars($material['description'] ?? 'Описание отсутствует'); ?></p>
+                                        </div>
+                                        <div class="material-footer">
+                                            <div class="material-actions">
+                                                <a href="view_material.php?id=<?php echo $material['id']; ?>" class="btn btn-primary btn-sm">
+                                                    <i class="fas fa-eye"></i> Просмотреть
+                                                </a>
+                                                <a href="download_material.php?id=<?php echo $material['id']; ?>" class="btn btn-success btn-sm">
+                                                    <i class="fas fa-download"></i> Скачать
+                                                </a>
+                                            </div>
+                                            <span class="material-status <?php echo $material['is_viewed'] > 0 ? 'status-viewed' : 'status-new'; ?>">
+                                                <?php echo $material['is_viewed'] > 0 ? 'Просмотрено' : 'Новое'; ?>
+                                            </span>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="empty-state">
+                                    <i class="fas fa-book"></i>
+                                    <p>Пока нет учебных материалов.</p>
+                                    <p>Обратитесь к преподавателю для получения доступа.</p>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -2423,6 +3201,7 @@ try {
 
     <script>
 // Управление уведомлениями
+// Управление уведомлениями
 function toggleNotifications() {
     const panel = document.getElementById('notificationsPanel');
     if (panel) {
@@ -2447,14 +3226,113 @@ function markAllAsRead() {
             if (badge) {
                 badge.style.display = 'none';
             }
-            // Закрываем панель уведомлений
-            document.getElementById('notificationsPanel').classList.remove('active');
         }
     })
     .catch(error => {
         console.error('Error:', error);
     });
 }
+
+function markNotificationAsRead(notificationId, element) {
+    fetch('mark_notification_read.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notification_id: notificationId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const notificationItem = element.closest('.notification-item');
+            notificationItem.classList.remove('unread');
+            
+            // Обновляем счетчик непрочитанных
+            const unreadCount = document.querySelectorAll('.notification-item.unread').length;
+            const badge = document.querySelector('.notification-badge');
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.textContent = unreadCount;
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+}
+
+function deleteNotification(notificationId, element) {
+    if (confirm('Удалить это уведомление?')) {
+        fetch('delete_notification.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ notification_id: notificationId })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                element.closest('.notification-item').remove();
+                
+                // Если уведомлений не осталось, показываем пустое состояние
+                const notificationsList = document.querySelector('.notifications-list');
+                if (notificationsList.children.length === 1) { // Только empty state остался
+                    const emptyState = notificationsList.querySelector('.notifications-empty');
+                    if (!emptyState) {
+                        notificationsList.innerHTML = `
+                            <div class="notifications-empty">
+                                <i class="fas fa-bell-slash"></i>
+                                <h4>Нет уведомлений</h4>
+                                <p>Здесь будут появляться важные сообщения системы</p>
+                            </div>
+                        `;
+                    }
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    }
+}
+
+// Фильтрация по категориям
+document.addEventListener('DOMContentLoaded', function() {
+    const categories = document.querySelectorAll('.notification-category');
+    
+    categories.forEach(category => {
+        category.addEventListener('click', function() {
+            const categoryType = this.getAttribute('data-category');
+            
+            // Обновляем активную категорию
+            categories.forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Фильтруем уведомления
+            const notifications = document.querySelectorAll('.notification-item');
+            notifications.forEach(notification => {
+                if (categoryType === 'all') {
+                    notification.style.display = 'flex';
+                } else {
+                    const notificationType = notification.getAttribute('data-type');
+                    if (categoryType === 'system' && notificationType === 'info') {
+                        notification.style.display = 'flex';
+                    } else if (categoryType === 'tests' && notificationType === 'success') {
+                        notification.style.display = 'flex';
+                    } else if (categoryType === 'materials' && notificationType === 'warning') {
+                        notification.style.display = 'flex';
+                    } else {
+                        notification.style.display = 'none';
+                    }
+                }
+            });
+        });
+    });
+});
 
 // Модальные окна
 function openHelpModal() {
@@ -2476,6 +3354,126 @@ function closeChatModal() {
     document.getElementById('chatModal').classList.remove('active');
     document.body.style.overflow = 'auto';
 }
+
+// FAQ Accordion
+document.addEventListener('DOMContentLoaded', function() {
+    const faqQuestions = document.querySelectorAll('.faq-question');
+    
+    faqQuestions.forEach(question => {
+        question.addEventListener('click', function() {
+            const answer = this.nextElementSibling;
+            const isActive = this.classList.contains('active');
+            
+            // Закрываем все ответы
+            document.querySelectorAll('.faq-question').forEach(q => {
+                q.classList.remove('active');
+            });
+            document.querySelectorAll('.faq-answer').forEach(a => {
+                a.classList.remove('active');
+            });
+            
+            // Открываем текущий ответ, если он был закрыт
+            if (!isActive) {
+                this.classList.add('active');
+                answer.classList.add('active');
+            }
+        });
+    });
+});
+
+// Чат функциональность
+document.addEventListener('DOMContentLoaded', function() {
+    const messageInput = document.getElementById('messageInput');
+    const sendMessageBtn = document.getElementById('sendMessageBtn');
+    const chatMessages = document.getElementById('chatMessages');
+    const chatContacts = document.querySelectorAll('.chat-contact');
+    
+    // Автоматическое изменение высоты текстового поля
+    messageInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+    
+    // Отправка сообщения
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        if (message === '') return;
+        
+        // Добавляем сообщение в чат
+        const messageElement = document.createElement('div');
+        messageElement.className = 'message sent';
+        messageElement.innerHTML = `
+            <div class="message-avatar">
+                <?php 
+                $firstName = $user['full_name'];
+                if (function_exists('mb_convert_encoding')) {
+                    $firstName = mb_convert_encoding($firstName, 'UTF-8', 'auto');
+                }
+                $firstLetter = mb_substr($firstName, 0, 1, 'UTF-8');
+                echo htmlspecialchars(strtoupper($firstLetter));
+                ?>
+            </div>
+            <div class="message-content">
+                <p class="message-text">${message}</p>
+                <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+            </div>
+        `;
+        
+        chatMessages.appendChild(messageElement);
+        messageInput.value = '';
+        messageInput.style.height = 'auto';
+        
+        // Прокручиваем к последнему сообщению
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        // Имитируем ответ преподавателя через 2 секунды
+        setTimeout(() => {
+            const responses = [
+                "Спасибо за вопрос! Я постараюсь ответить как можно скорее.",
+                "Интересный вопрос. Давайте разберем его на следующем занятии.",
+                "Этот материал мы рассмотрим подробнее в следующей теме.",
+                "Вы можете найти дополнительную информацию в учебных материалах."
+            ];
+            const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+            
+            const responseElement = document.createElement('div');
+            responseElement.className = 'message received';
+            responseElement.innerHTML = `
+                <div class="message-avatar">
+                    <i class="fas fa-user-tie"></i>
+                </div>
+                <div class="message-content">
+                    <p class="message-text">${randomResponse}</p>
+                    <div class="message-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                </div>
+            `;
+            
+            chatMessages.appendChild(responseElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 2000);
+    }
+    
+    // Отправка по кнопке
+    sendMessageBtn.addEventListener('click', sendMessage);
+    
+    // Отправка по Enter (но не Shift+Enter)
+    messageInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+    
+    // Переключение контактов
+    chatContacts.forEach(contact => {
+        contact.addEventListener('click', function() {
+            chatContacts.forEach(c => c.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Здесь можно добавить логику загрузки истории сообщений для выбранного контакта
+        });
+    });
+});
 
 // Закрытие модальных окон при клике вне их
 document.addEventListener('click', function(e) {
@@ -2703,7 +3701,7 @@ document.getElementById('globalSearch').addEventListener('input', function() {
 // Анимация при загрузке
 document.addEventListener('DOMContentLoaded', function() {
     // Анимация появления элементов
-    const cards = document.querySelectorAll('.stat-card, .test-item, .section, .quick-action-card');
+    const cards = document.querySelectorAll('.stat-card, .test-item, .section, .quick-action-card, .material-card');
     cards.forEach((card, index) => {
         card.style.opacity = '0';
         card.style.transform = 'translateY(20px)';
