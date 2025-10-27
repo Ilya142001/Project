@@ -170,17 +170,28 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
     <style>
         :root {
             --primary: #6366f1;
-            --primary-hover: #4f46e5;
+            --primary-light: #818cf8;
+            --primary-dark: #4f46e5;
             --secondary: #64748b;
             --success: #10b981;
+            --success-light: #34d399;
             --danger: #ef4444;
+            --danger-light: #f87171;
             --warning: #f59e0b;
             --info: #3b82f6;
             --light: #f8fafc;
-            --dark: #1e293b;
+            --light-gray: #f1f5f9;
             --border: #e2e8f0;
-            --card-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --border-dark: #cbd5e1;
+            --text: #334155;
+            --text-light: #64748b;
+            --text-dark: #1e293b;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             --radius: 12px;
+            --radius-sm: 8px;
+            --transition: all 0.2s ease-in-out;
         }
         
         * {
@@ -191,8 +202,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: white;
-            color: var(--dark);
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            color: var(--text);
             line-height: 1.6;
             min-height: 100vh;
             overflow-x: hidden;
@@ -206,13 +217,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         /* Header Styles */
         .header {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
             color: white;
             padding: 1.5rem 2rem;
-            box-shadow: var(--card-shadow);
+            box-shadow: var(--shadow-lg);
             position: sticky;
             top: 0;
             z-index: 100;
+            backdrop-filter: blur(10px);
         }
         
         .header-content {
@@ -238,21 +250,24 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         }
         
         .close-btn {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.15);
             color: white;
-            border: none;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 0.75rem 1.5rem;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 0.5rem;
             text-decoration: none;
+            transition: var(--transition);
+            backdrop-filter: blur(10px);
         }
         
         .close-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-1px);
         }
         
         /* Main Content */
@@ -268,8 +283,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             border-radius: var(--radius);
             padding: 2rem;
             margin-bottom: 2rem;
-            box-shadow: var(--card-shadow);
+            box-shadow: var(--shadow);
             border: 1px solid var(--border);
+            transition: var(--transition);
+        }
+        
+        .card:hover {
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
         }
         
         .card-header {
@@ -278,13 +299,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             justify-content: space-between;
             margin-bottom: 1.5rem;
             padding-bottom: 1rem;
-            border-bottom: 2px solid var(--light);
+            border-bottom: 2px solid var(--light-gray);
         }
         
         .card-title {
             font-size: 1.5rem;
             font-weight: 600;
-            color: var(--dark);
+            color: var(--text-dark);
             display: flex;
             align-items: center;
             gap: 0.75rem;
@@ -293,24 +314,37 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         /* Alert Styles */
         .alert {
             padding: 1rem 1.5rem;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             margin-bottom: 1.5rem;
             display: flex;
             align-items: center;
             gap: 0.75rem;
             font-weight: 500;
+            border-left: 4px solid;
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
         }
         
         .alert-error {
             background: #fef2f2;
             color: var(--danger);
-            border-left: 4px solid var(--danger);
+            border-left-color: var(--danger);
         }
         
         .alert-success {
             background: #f0fdf4;
             color: var(--success);
-            border-left: 4px solid var(--success);
+            border-left-color: var(--success);
         }
         
         /* Form Styles */
@@ -322,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             display: block;
             margin-bottom: 0.5rem;
             font-weight: 600;
-            color: var(--dark);
+            color: var(--text-dark);
             display: flex;
             align-items: center;
             gap: 0.5rem;
@@ -334,9 +368,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             width: 100%;
             padding: 1rem;
             border: 2px solid var(--border);
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             font-size: 1rem;
             font-family: inherit;
+            transition: var(--transition);
+            background: white;
         }
         
         .form-input:focus,
@@ -345,11 +381,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             outline: none;
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+            transform: translateY(-1px);
         }
         
         .form-textarea {
             min-height: 120px;
             resize: vertical;
+            line-height: 1.5;
         }
         
         /* Button Styles */
@@ -359,12 +397,30 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             gap: 0.5rem;
             padding: 1rem 2rem;
             border: none;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             font-size: 1rem;
             font-weight: 600;
             text-decoration: none;
             cursor: pointer;
             font-family: inherit;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn:hover::before {
+            left: 100%;
         }
         
         .btn-primary {
@@ -373,7 +429,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         }
         
         .btn-primary:hover {
-            background: var(--primary-hover);
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
         
         .btn-success {
@@ -383,6 +441,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         .btn-success:hover {
             background: #059669;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
         }
         
         .btn-danger {
@@ -392,19 +452,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         .btn-danger:hover {
             background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .btn-outline:hover {
+            background: var(--primary);
+            color: white;
+            transform: translateY(-2px);
         }
         
         .btn-sm {
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1.5rem;
             font-size: 0.875rem;
         }
         
         /* Options Styles */
         .options-container {
-            background: var(--light);
+            background: var(--light-gray);
             padding: 1.5rem;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             margin: 1.5rem 0;
+            border: 1px solid var(--border);
+            animation: fadeIn 0.3s ease-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         
         .option-item {
@@ -414,19 +495,31 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             margin-bottom: 1rem;
             padding: 1rem;
             background: white;
-            border-radius: 8px;
+            border-radius: var(--radius-sm);
             border: 1px solid var(--border);
+            transition: var(--transition);
+        }
+        
+        .option-item:hover {
+            border-color: var(--primary);
+            transform: translateX(5px);
         }
         
         .option-item input[type="text"] {
             flex: 1;
             margin: 0;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.75rem;
         }
         
         .correct-marker {
             color: var(--success);
             font-weight: 600;
             white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         
         /* Questions List */
@@ -440,11 +533,40 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         .question-item {
             background: white;
-            border-radius: 12px;
+            border-radius: var(--radius);
             padding: 1.5rem;
             margin-bottom: 1rem;
             border: 1px solid var(--border);
             position: relative;
+            transition: var(--transition);
+            animation: slideInUp 0.3s ease-out;
+        }
+        
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .question-item:hover {
+            border-color: var(--primary);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
+        }
+        
+        .question-item.placeholder {
+            background: var(--light-gray);
+            border: 2px dashed var(--border-dark);
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-light);
         }
         
         .question-header {
@@ -453,7 +575,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             gap: 1rem;
             margin-bottom: 1rem;
             padding-bottom: 1rem;
-            border-bottom: 1px solid var(--light);
+            border-bottom: 1px solid var(--light-gray);
         }
         
         .handle {
@@ -461,12 +583,19 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             color: var(--secondary);
             padding: 0.5rem;
             border-radius: 6px;
-            background: var(--light);
+            background: var(--light-gray);
+            transition: var(--transition);
+        }
+        
+        .handle:hover {
+            background: var(--primary);
+            color: white;
         }
         
         .question-number {
             font-weight: 600;
-            color: var(--dark);
+            color: var(--text-dark);
+            font-size: 1.1rem;
         }
         
         .badge {
@@ -474,10 +603,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             border-radius: 20px;
             font-size: 0.875rem;
             font-weight: 600;
+            transition: var(--transition);
         }
         
         .badge-primary {
-            background: var(--primary);
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
             color: white;
         }
         
@@ -486,11 +616,17 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             color: white;
         }
         
+        .badge-success {
+            background: var(--success);
+            color: white;
+        }
+        
         .question-text {
             font-size: 1.125rem;
             margin-bottom: 1rem;
             line-height: 1.6;
-            color: var(--dark);
+            color: var(--text-dark);
+            padding: 0.5rem 0;
         }
         
         .options-list {
@@ -505,9 +641,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         .options-list li {
             padding: 0.75rem;
             margin-bottom: 0.5rem;
-            background: var(--light);
+            background: var(--light-gray);
             border-radius: 6px;
             border-left: 3px solid var(--secondary);
+            transition: var(--transition);
+        }
+        
+        .options-list li:hover {
+            transform: translateX(5px);
         }
         
         .options-list li.correct {
@@ -520,7 +661,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             gap: 0.75rem;
             margin-top: 1rem;
             padding-top: 1rem;
-            border-top: 1px solid var(--light);
+            border-top: 1px solid var(--light-gray);
         }
         
         /* Test Info */
@@ -533,24 +674,82 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         .test-details p {
             margin-bottom: 0.5rem;
-            color: var(--secondary);
+            color: var(--text-light);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
         
         .test-details strong {
-            color: var(--dark);
+            color: var(--text-dark);
+            min-width: 150px;
+            display: inline-block;
+        }
+        
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .stat-card {
+            background: var(--light-gray);
+            padding: 1.5rem;
+            border-radius: var(--radius-sm);
+            text-align: center;
+            border: 1px solid var(--border);
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+        
+        .stat-label {
+            color: var(--text-light);
+            font-size: 0.875rem;
+            font-weight: 500;
         }
         
         /* Empty State */
         .empty-state {
             text-align: center;
             padding: 3rem;
-            color: var(--secondary);
+            color: var(--text-light);
         }
         
         .empty-state i {
-            font-size: 3rem;
+            font-size: 4rem;
             margin-bottom: 1rem;
             color: var(--border);
+            opacity: 0.5;
+        }
+        
+        .empty-state h3 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-dark);
+        }
+        
+        /* Progress Bar */
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--light-gray);
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary) 0%, var(--success) 100%);
+            border-radius: 4px;
+            transition: width 0.3s ease;
         }
         
         /* Responsive Design */
@@ -593,10 +792,15 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             .option-item {
                 flex-direction: column;
                 align-items: stretch;
+                gap: 0.75rem;
             }
             
             .card {
                 padding: 1.5rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
             }
         }
         
@@ -617,6 +821,47 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         
         .compact .btn {
             padding: 0.75rem 1.5rem;
+        }
+        
+        /* Loading animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Floating action button */
+        .fab {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 60px;
+            height: 60px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            box-shadow: var(--shadow-lg);
+            transition: var(--transition);
+            z-index: 1000;
+        }
+        
+        .fab:hover {
+            background: var(--primary-dark);
+            transform: scale(1.1);
         }
     </style>
 </head>
@@ -645,41 +890,84 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                 </div>
             <?php endif; ?>
 
+            <!-- Test Overview Card -->
             <div class="card">
                 <div class="test-info">
-                    <div class="test-details">
+                    <div>
                         <h2 class="card-title">
                             <i class="fas fa-info-circle"></i>
                             Информация о тесте
                         </h2>
-                        <p><strong>Описание:</strong> <?php echo htmlspecialchars($test['description']); ?></p>
-                        <p><strong>Время на выполнение:</strong> <?php echo $test['time_limit']; ?> минут</p>
-                        <p><strong>Статус:</strong> 
-                            <?php echo $test['is_active'] ? 'Активный' : 'Неактивный'; ?> | 
-                            <?php echo $test['is_published'] ? 'Опубликован' : 'Черновик'; ?>
+                        <p><strong><i class="fas fa-align-left"></i> Описание:</strong> <?php echo htmlspecialchars($test['description']); ?></p>
+                        <p><strong><i class="fas fa-clock"></i> Время на выполнение:</strong> <?php echo $test['time_limit']; ?> минут</p>
+                        <p><strong><i class="fas fa-chart-bar"></i> Статус:</strong> 
+                            <span class="badge <?php echo $test['is_active'] ? 'badge-success' : 'badge-secondary'; ?>">
+                                <?php echo $test['is_active'] ? 'Активный' : 'Неактивный'; ?>
+                            </span> | 
+                            <span class="badge <?php echo $test['is_published'] ? 'badge-success' : 'badge-secondary'; ?>">
+                                <?php echo $test['is_published'] ? 'Опубликован' : 'Черновик'; ?>
+                            </span>
                         </p>
+                        
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-number"><?php echo count($questions); ?></div>
+                                <div class="stat-label">Всего вопросов</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">
+                                    <?php 
+                                        $total_points = 0;
+                                        foreach ($questions as $q) {
+                                            $total_points += $q['points'];
+                                        }
+                                        echo $total_points;
+                                    ?>
+                                </div>
+                                <div class="stat-label">Общее количество баллов</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-number">
+                                    <?php
+                                        $multiple_choice = 0;
+                                        foreach ($questions as $q) {
+                                            if ($q['question_type'] == 'multiple_choice') {
+                                                $multiple_choice++;
+                                            }
+                                        }
+                                        echo $multiple_choice;
+                                    ?>
+                                </div>
+                                <div class="stat-label">Вопросы с выбором</div>
+                            </div>
+                        </div>
                     </div>
                     <a href="test_settings.php?id=<?php echo $test_id; ?>" class="btn btn-primary" target="_blank">
                         <i class="fas fa-cog"></i>
-                        Настройки
+                        Настройки теста
                     </a>
                 </div>
             </div>
 
+            <!-- Add Question Card -->
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">
                         <i class="fas fa-plus-circle"></i>
-                        Добавить вопрос
+                        Добавить новый вопрос
                     </h2>
                 </div>
-                <form method="POST">
+                <form method="POST" id="questionForm">
                     <div class="form-group">
                         <label class="form-label">
                             <i class="fas fa-question-circle"></i>
                             Текст вопроса:
                         </label>
-                        <textarea name="question_text" class="form-textarea" required placeholder="Введите текст вопроса..."></textarea>
+                        <textarea name="question_text" class="form-textarea" required placeholder="Введите текст вопроса..." id="questionText"></textarea>
+                        <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; font-size: 0.875rem; color: var(--text-light);">
+                            <span id="charCount">0 символов</span>
+                            <span>Минимум 10 символов</span>
+                        </div>
                     </div>
                     
                     <div class="form-group">
@@ -696,41 +984,61 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                     <div class="form-group">
                         <label class="form-label">
                             <i class="fas fa-star"></i>
-                            Баллы:
+                            Баллы за вопрос:
                         </label>
-                        <input type="number" name="points" class="form-input" value="1" min="1" required>
+                        <input type="number" name="points" class="form-input" value="1" min="1" max="10" required>
                     </div>
                     
                     <div id="options_container" class="options-container" style="display: none;">
-                        <h3 style="margin-bottom: 1rem; color: var(--dark);">
+                        <h3 style="margin-bottom: 1rem; color: var(--text-dark); display: flex; align-items: center; gap: 0.5rem;">
                             <i class="fas fa-list-ol"></i>
                             Варианты ответов
                         </h3>
                         <div id="options_list">
                             <div class="option-item">
-                                <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 1">
-                                <input type="radio" name="correct_option" value="0" checked> 
-                                <span class="correct-marker">Правильный</span>
+                                <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 1" required>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="radio" name="correct_option" value="0" checked> 
+                                    <span class="correct-marker">
+                                        <i class="fas fa-check"></i>
+                                        Правильный
+                                    </span>
+                                </div>
                             </div>
                             <div class="option-item">
-                                <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 2">
-                                <input type="radio" name="correct_option" value="1"> 
-                                <span class="correct-marker">Правильный</span>
+                                <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа 2" required>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="radio" name="correct_option" value="1"> 
+                                    <span class="correct-marker">
+                                        <i class="fas fa-check"></i>
+                                        Правильный
+                                    </span>
+                                    <button type="button" class="btn btn-danger btn-sm" onclick="removeOption(this)" style="padding: 0.5rem;">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-primary" onclick="addOption()">
+                        <button type="button" class="btn btn-outline" onclick="addOption()">
                             <i class="fas fa-plus"></i>
-                            Добавить вариант
+                            Добавить вариант ответа
                         </button>
                     </div>
                     
-                    <button type="submit" name="add_question" class="btn btn-success">
-                        <i class="fas fa-save"></i>
-                        Добавить вопрос
-                    </button>
+                    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                        <button type="submit" name="add_question" class="btn btn-success" id="submitBtn">
+                            <i class="fas fa-save"></i>
+                            Сохранить вопрос
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="resetForm()">
+                            <i class="fas fa-undo"></i>
+                            Очистить форму
+                        </button>
+                    </div>
                 </form>
             </div>
 
+            <!-- Questions List Card -->
             <div class="card">
                 <div class="card-header">
                     <h2 class="card-title">
@@ -738,6 +1046,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                         Вопросы теста
                         <span class="badge badge-primary"><?php echo count($questions); ?></span>
                     </h2>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <span style="color: var(--text-light); font-size: 0.875rem;">
+                            <i class="fas fa-arrows-alt-v"></i>
+                            Перетащите для изменения порядка
+                        </span>
+                    </div>
                 </div>
                 
                 <?php if (empty($questions)): ?>
@@ -748,6 +1062,13 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                     </div>
                 <?php else: ?>
                     <form method="POST" id="order_form">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: <?php echo min(100, (count($questions) / 20 * 100)); ?>%"></div>
+                        </div>
+                        <div style="text-align: center; margin-bottom: 1rem; color: var(--text-light); font-size: 0.875rem;">
+                            <?php echo count($questions); ?> из 20 вопросов (рекомендуется)
+                        </div>
+                        
                         <ul id="sortable" class="sortable-list">
                             <?php foreach ($questions as $index => $question): ?>
                                 <li class="question-item" data-id="<?php echo $question['id']; ?>">
@@ -756,8 +1077,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                                             <i class="fas fa-bars"></i>
                                         </span>
                                         <span class="question-number">Вопрос #<?php echo ($index + 1); ?></span>
-                                        <span class="badge badge-primary"><?php echo $question['points']; ?> баллов</span>
-                                        <span class="badge badge-secondary">
+                                        <span class="badge badge-primary">
+                                            <i class="fas fa-star"></i>
+                                            <?php echo $question['points']; ?> баллов
+                                        </span>
+                                        <span class="badge <?php echo $question['question_type'] == 'text' ? 'badge-secondary' : 'badge-success'; ?>">
                                             <?php echo $question['question_type'] == 'text' ? 'Текстовый' : 'Множественный выбор'; ?>
                                         </span>
                                     </div>
@@ -774,7 +1098,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                                         ?>
                                         <?php if (!empty($options)): ?>
                                             <div class="options-list">
-                                                <h4 style="margin-bottom: 0.75rem; color: var(--dark);">
+                                                <h4 style="margin-bottom: 0.75rem; color: var(--text-dark); display: flex; align-items: center; gap: 0.5rem;">
                                                     <i class="fas fa-list-check"></i>
                                                     Варианты ответов:
                                                 </h4>
@@ -785,7 +1109,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                                                             <?php if ($option['is_correct']): ?>
                                                                 <span class="correct-marker">
                                                                     <i class="fas fa-check"></i>
-                                                                    Правильный
+                                                                    Правильный ответ
                                                                 </span>
                                                             <?php endif; ?>
                                                         </li>
@@ -802,7 +1126,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                                         </a>
                                         <a href="test_edit.php?id=<?php echo $test_id; ?>&delete_question=<?php echo $question['id']; ?>" 
                                            class="btn btn-danger btn-sm" 
-                                           onclick="return confirm('Удалить этот вопрос?')">
+                                           onclick="return confirm('Вы уверены, что хотите удалить этот вопрос?')">
                                             <i class="fas fa-trash"></i>
                                             Удалить
                                         </a>
@@ -813,15 +1137,26 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
                             <?php endforeach; ?>
                         </ul>
                         
-                        <button type="submit" name="update_order" class="btn btn-success">
-                            <i class="fas fa-save"></i>
-                            Сохранить порядок
-                        </button>
+                        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+                            <button type="submit" name="update_order" class="btn btn-success">
+                                <i class="fas fa-save"></i>
+                                Сохранить порядок вопросов
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">
+                                <i class="fas fa-arrow-up"></i>
+                                Наверх
+                            </button>
+                        </div>
                     </form>
                 <?php endif; ?>
             </div>
         </div>
     </div>
+
+    <!-- Floating Action Button -->
+    <button class="fab" onclick="scrollToAddForm()" title="Добавить вопрос">
+        <i class="fas fa-plus"></i>
+    </button>
 
     <script>
     function closeModal() {
@@ -841,11 +1176,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
         const div = document.createElement('div');
         div.className = 'option-item';
         div.innerHTML = `
-            <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа ${optionCount + 1}">
+            <input type="text" name="options[]" class="form-input" placeholder="Вариант ответа ${optionCount + 1}" required>
             <div style="display: flex; align-items: center; gap: 0.5rem;">
                 <input type="radio" name="correct_option" value="${optionCount}"> 
-                <span class="correct-marker">Правильный</span>
-                <button type="button" class="btn btn-danger btn-sm" onclick="removeOption(this)">
+                <span class="correct-marker">
+                    <i class="fas fa-check"></i>
+                    Правильный
+                </span>
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeOption(this)" style="padding: 0.5rem;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -862,13 +1200,102 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_order'])) {
             document.querySelectorAll('input[name="correct_option"]').forEach((radio, index) => {
                 radio.value = index;
             });
+        } else {
+            alert('Должно быть как минимум 2 варианта ответа');
+        }
+    }
+    
+    function resetForm() {
+        document.getElementById('questionForm').reset();
+        document.getElementById('questionText').focus();
+        updateCharCount();
+        toggleOptions();
+    }
+    
+    function scrollToAddForm() {
+        document.querySelector('.card:nth-child(2)').scrollIntoView({ 
+            behavior: 'smooth',
+            block: 'start'
+        });
+    }
+    
+    function updateCharCount() {
+        const textarea = document.getElementById('questionText');
+        const charCount = document.getElementById('charCount');
+        charCount.textContent = textarea.value.length + ' символов';
+        
+        // Подсветка при недостаточной длине
+        if (textarea.value.length < 10) {
+            charCount.style.color = 'var(--danger)';
+        } else {
+            charCount.style.color = 'var(--success)';
         }
     }
     
     // Инициализация при загрузке
     document.addEventListener('DOMContentLoaded', function() {
         toggleOptions();
+        
+        // Счетчик символов для текста вопроса
+        const questionText = document.getElementById('questionText');
+        if (questionText) {
+            questionText.addEventListener('input', updateCharCount);
+            updateCharCount();
+        }
+        
+        // Drag and drop для вопросов
+        const sortable = document.getElementById('sortable');
+        if (sortable) {
+            let draggedItem = null;
+            
+            // Добавляем обработчики событий для drag and drop
+            document.querySelectorAll('.question-item').forEach(item => {
+                item.setAttribute('draggable', true);
+                
+                item.addEventListener('dragstart', function(e) {
+                    draggedItem = this;
+                    setTimeout(() => this.style.opacity = '0.5', 0);
+                });
+                
+                item.addEventListener('dragend', function() {
+                    this.style.opacity = '1';
+                    draggedItem = null;
+                });
+                
+                item.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                });
+                
+                item.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    if (draggedItem && draggedItem !== this) {
+                        const allItems = Array.from(sortable.children);
+                        const thisIndex = allItems.indexOf(this);
+                        const draggedIndex = allItems.indexOf(draggedItem);
+                        
+                        if (draggedIndex < thisIndex) {
+                            this.parentNode.insertBefore(draggedItem, this.nextSibling);
+                        } else {
+                            this.parentNode.insertBefore(draggedItem, this);
+                        }
+                        
+                        // Обновляем порядок в скрытых полях
+                        updateOrderFields();
+                    }
+                });
+            });
+        }
     });
+    
+    function updateOrderFields() {
+        const items = document.querySelectorAll('.question-item');
+        items.forEach((item, index) => {
+            const hiddenInput = item.querySelector('input[name="order[]"]');
+            if (hiddenInput) {
+                hiddenInput.value = item.getAttribute('data-id');
+            }
+        });
+    }
     </script>
 </body>
 </html>

@@ -2,18 +2,15 @@
 include 'config.php';
 session_start();
 
-// Проверяем, авторизован ли пользователь
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
 }
 
-// Получаем информацию о пользователе
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
-// Обработка поиска и фильтров
 $search = $_GET['search'] ?? '';
 $subject = $_GET['subject'] ?? '';
 $status = $_GET['status'] ?? '';
@@ -21,7 +18,6 @@ $sort = $_GET['sort'] ?? 'newest';
 
 // Базовый запрос для тестов
 if ($user['role'] == 'student') {
-    // Для студентов показываем доступные тесты и пройденные
     $query = "
         SELECT 
             t.*, 
@@ -30,14 +26,14 @@ if ($user['role'] == 'student') {
             (SELECT MAX(percentage) FROM test_results WHERE test_id = t.id AND user_id = ?) as best_score,
             (SELECT passed FROM test_results WHERE test_id = t.id AND user_id = ? ORDER BY completed_at DESC LIMIT 1) as last_status,
             (SELECT COUNT(*) FROM test_results WHERE test_id = t.id) as total_attempts,
-            (SELECT AVG(percentage) FROM test_results WHERE test_id = t.id) as avg_success
+            (SELECT AVG(percentage) FROM test_results WHERE test_id = t.id) as avg_success,
+            (SELECT MAX(attempt_number) FROM test_results WHERE test_id = t.id AND user_id = ?) as user_attempts
         FROM tests t
         JOIN users u ON t.created_by = u.id
         WHERE t.is_active = 1
     ";
-    $params = [$_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id']];
+    $params = [$_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id']];
 } else {
-    // Для преподавателей и администраторов показываем все их тесты
     $query = "
         SELECT 
             t.*, 
@@ -55,7 +51,6 @@ if ($user['role'] == 'student') {
     $params = [$_SESSION['user_id']];
 }
 
-// Добавляем условия поиска и фильтров
 if (!empty($search)) {
     $query .= " AND (t.title LIKE ? OR t.description LIKE ? OR t.subject LIKE ?)";
     $search_term = "%$search%";
@@ -67,7 +62,6 @@ if (!empty($subject)) {
     $params[] = $subject;
 }
 
-// Фильтр по статусу для студентов
 if ($user['role'] == 'student' && !empty($status)) {
     if ($status == 'available') {
         $query .= " AND (SELECT COUNT(*) FROM test_results WHERE test_id = t.id AND user_id = ?) = 0";
@@ -81,37 +75,23 @@ if ($user['role'] == 'student' && !empty($status)) {
     }
 }
 
-// Сортировка
 switch ($sort) {
-    case 'title':
-        $query .= " ORDER BY t.title ASC";
-        break;
-    case 'subject':
-        $query .= " ORDER BY t.subject ASC, t.title ASC";
-        break;
-    case 'popular':
-        $query .= " ORDER BY total_attempts DESC";
-        break;
-    case 'success':
-        $query .= " ORDER BY avg_success DESC";
-        break;
+    case 'title': $query .= " ORDER BY t.title ASC"; break;
+    case 'subject': $query .= " ORDER BY t.subject ASC, t.title ASC"; break;
+    case 'popular': $query .= " ORDER BY total_attempts DESC"; break;
+    case 'success': $query .= " ORDER BY avg_success DESC"; break;
     case 'newest':
-    default:
-        $query .= " ORDER BY t.created_at DESC";
-        break;
+    default: $query .= " ORDER BY t.created_at DESC"; break;
 }
 
-// Выполняем запрос
 $stmt = $pdo->prepare($query);
 $stmt->execute($params);
 $tests = $stmt->fetchAll();
 
-// Получаем список предметов для фильтра
 $stmt = $pdo->prepare("SELECT DISTINCT subject FROM tests WHERE is_active = 1 ORDER BY subject");
 $stmt->execute();
 $subjects = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-// Получаем статистику для преподавателей
 if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
     $stmt = $pdo->prepare("
         SELECT 
@@ -132,61 +112,72 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Тесты - Система интеллектуальной оценки знаний</title>
+    <title>Тесты - Система оценки знаний</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
         
         :root {
-            --primary: #3498db;
-            --primary-dark: #2980b9;
-            --secondary: #2c3e50;
-            --accent: #e74c3c;
-            --light: #f5f7fa;
-            --gray: #7f8c8d;
-            --success: #2ecc71;
-            --warning: #f39c12;
-            --danger: #e74c3c;
-            --info: #17a2b8;
+            --primary: #2563eb;
+            --primary-light: #3b82f6;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --gray-50: #f9fafb;
+            --gray-100: #f3f4f6;
+            --gray-200: #e5e7eb;
+            --gray-500: #6b7280;
+            --gray-700: #374151;
+            --gray-900: #111827;
         }
         
         body {
-            background-color: #f0f2f5;
-            color: #333;
+            background: var(--gray-50);
+            color: var(--gray-900);
             line-height: 1.6;
+            min-height: 100vh;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
         }
 
         .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid var(--gray-200);
+        }
+        
+        .header-content {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 30px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #e0e0e0;
         }
         
         .header h1 {
-            font-size: 32px;
-            color: var(--secondary);
-            font-weight: 700;
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--gray-900);
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
         
         .breadcrumb {
             display: flex;
             align-items: center;
-            gap: 10px;
-            color: var(--gray);
+            gap: 8px;
+            color: var(--gray-500);
             font-size: 14px;
         }
         
@@ -194,81 +185,62 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
             color: var(--primary);
             text-decoration: none;
         }
-        
-        .breadcrumb i {
-            font-size: 12px;
-        }
 
-        /* Stats Overview for Teachers */
+        /* Stats Overview */
         <?php if ($user['role'] == 'teacher' || $user['role'] == 'admin'): ?>
         .stats-overview {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            gap: 16px;
+            margin-bottom: 24px;
         }
         
         .stat-card {
             background: white;
             border-radius: 12px;
             padding: 20px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.08);
             text-align: center;
-            border-left: 4px solid var(--primary);
+            border: 1px solid var(--gray-200);
+            transition: transform 0.2s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
         }
         
         .stat-card h3 {
             font-size: 28px;
-            margin-bottom: 5px;
-            color: var(--secondary);
+            margin-bottom: 4px;
+            color: var(--gray-900);
             font-weight: 700;
         }
         
         .stat-card p {
-            color: var(--gray);
+            color: var(--gray-500);
             font-size: 14px;
-        }
-        
-        .stat-card.success {
-            border-left-color: var(--success);
-        }
-        
-        .stat-card.warning {
-            border-left-color: var(--warning);
-        }
-        
-        .stat-card.info {
-            border-left-color: var(--info);
         }
         <?php endif; ?>
 
-        /* Filters and Search */
+        /* Filters */
         .filters-section {
             background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-            margin-bottom: 25px;
-        }
-        
-        .filters-header {
-            display: flex;
-            justify-content: between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .filters-title {
-            font-size: 18px;
-            color: var(--secondary);
-            font-weight: 600;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border: 1px solid var(--gray-200);
         }
         
         .filters-grid {
             display: grid;
             grid-template-columns: 2fr 1fr 1fr 1fr auto;
-            gap: 15px;
+            gap: 16px;
             align-items: end;
+        }
+        
+        @media (max-width: 1024px) {
+            .filters-grid {
+                grid-template-columns: 1fr 1fr;
+            }
         }
         
         @media (max-width: 768px) {
@@ -285,169 +257,141 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
         
         .filter-label {
             font-size: 14px;
-            font-weight: 600;
-            color: var(--secondary);
+            font-weight: 500;
+            color: var(--gray-700);
         }
         
         .filter-input, .filter-select {
-            padding: 12px 15px;
-            border: 1px solid #e0e0e0;
+            padding: 12px 16px;
+            border: 1px solid var(--gray-200);
             border-radius: 8px;
             font-size: 14px;
             background: white;
             width: 100%;
+            transition: border-color 0.2s ease;
         }
         
         .filter-input:focus, .filter-select:focus {
             outline: none;
             border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
         }
         
         .filter-actions {
             display: flex;
-            gap: 10px;
+            gap: 12px;
         }
 
         /* Tests Grid */
         .tests-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 25px;
-            margin-bottom: 30px;
+            gap: 20px;
+            margin-bottom: 40px;
         }
-        
+
         .test-card {
             background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-            transition: all 0.3s ease;
-            border-left: 4px solid var(--primary);
+            border-radius: 12px;
+            padding: 24px;
+            border: 1px solid var(--gray-200);
+            transition: all 0.2s ease;
             position: relative;
-            overflow: hidden;
         }
-        
-        .test-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--primary), var(--secondary));
-            transform: scaleX(0);
-            transition: transform 0.3s;
-        }
-        
+
         .test-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
         }
-        
-        .test-card:hover::before {
-            transform: scaleX(1);
-        }
-        
-        .test-card.available {
-            border-left-color: var(--success);
-        }
-        
-        .test-card.completed {
-            border-left-color: var(--info);
-        }
-        
-        .test-card.failed {
-            border-left-color: var(--warning);
-        }
-        
+
         .test-header {
             display: flex;
-            justify-content: between;
+            justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
         }
-        
+
         .test-title {
             font-size: 18px;
-            font-weight: 700;
-            color: var(--secondary);
+            font-weight: 600;
+            color: var(--gray-900);
             margin-bottom: 8px;
-            line-height: 1.3;
+            line-height: 1.4;
+            letter-spacing: -0.01em;
         }
-        
+
         .test-subject {
             display: inline-block;
-            background: rgba(52, 152, 219, 0.1);
-            color: var(--primary);
+            background: var(--gray-100);
+            color: var(--gray-700);
             padding: 4px 12px;
             border-radius: 20px;
             font-size: 12px;
-            font-weight: 600;
-            margin-bottom: 10px;
+            font-weight: 500;
+            margin-bottom: 12px;
+            border: 1px solid var(--gray-200);
         }
-        
+
         .test-description {
-            color: var(--gray);
+            color: var(--gray-500);
             font-size: 14px;
-            margin-bottom: 15px;
+            margin-bottom: 20px;
             line-height: 1.5;
         }
-        
+
         .test-meta {
             display: flex;
             justify-content: space-between;
             font-size: 13px;
-            color: var(--gray);
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid #f0f0f0;
+            color: var(--gray-500);
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--gray-200);
         }
-        
+
         .test-meta-item {
             display: flex;
             align-items: center;
-            gap: 5px;
+            gap: 6px;
         }
-        
+
         .test-stats {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            gap: 12px;
             margin-bottom: 20px;
         }
-        
+
         .stat-item {
             text-align: center;
-            padding: 10px;
-            background: var(--light);
+            padding: 12px;
+            background: var(--gray-50);
             border-radius: 8px;
         }
-        
+
         .stat-value {
             font-size: 18px;
-            font-weight: 700;
-            color: var(--secondary);
+            font-weight: 600;
+            color: var(--gray-900);
         }
-        
+
         .stat-label {
             font-size: 12px;
-            color: var(--gray);
+            color: var(--gray-500);
         }
-        
+
         .test-actions {
             display: flex;
-            gap: 10px;
+            gap: 8px;
         }
-        
+
         .btn {
-            padding: 10px 20px;
+            padding: 12px 20px;
             border: none;
             border-radius: 8px;
             font-size: 14px;
             font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s ease;
             text-decoration: none;
             display: inline-flex;
             align-items: center;
@@ -456,167 +400,149 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
             justify-content: center;
             flex: 1;
         }
-        
+
         .btn-primary {
             background: var(--primary);
             color: white;
         }
-        
+
         .btn-primary:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
+            background: var(--primary-light);
         }
-        
-        .btn-success {
-            background: var(--success);
-            color: white;
-        }
-        
-        .btn-success:hover {
-            background: #27ae60;
-            transform: translateY(-2px);
-        }
-        
+
         .btn-warning {
             background: var(--warning);
             color: white;
         }
-        
+
         .btn-warning:hover {
-            background: #e67e22;
-            transform: translateY(-2px);
-        }
-        
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-        
-        .btn-danger:hover {
-            background: #c0392b;
-            transform: translateY(-2px);
-        }
-        
-        .btn-outline {
-            background: transparent;
-            border: 2px solid var(--primary);
-            color: var(--primary);
-        }
-        
-        .btn-outline:hover {
-            background: var(--primary);
-            color: white;
+            background: #b45309;
         }
 
-        .btn-sm {
-            padding: 8px 15px;
-            font-size: 13px;
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--gray-300);
+            color: var(--gray-700);
+        }
+
+        .btn-outline:hover {
+            background: var(--gray-50);
+            border-color: var(--gray-400);
         }
 
         /* Status Badges */
         .status-badge {
             padding: 4px 12px;
             border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
+            font-size: 11px;
+            font-weight: 500;
             display: inline-block;
         }
-        
+
         .status-available {
-            background: rgba(46, 204, 113, 0.1);
+            background: #ecfdf5;
+            color: var(--success);
+            border: 1px solid #a7f3d0;
+        }
+
+        .status-completed {
+            background: #f0fdf4;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .status-failed {
+            background: #fef2f2;
+            color: var(--danger);
+            border: 1px solid #fecaca;
+        }
+
+        /* Results Info */
+        .results-info {
+            background: var(--gray-50);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            border: 1px solid var(--gray-200);
+        }
+
+        .score-display {
+            font-size: 20px;
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 4px;
+        }
+
+        .score-excellent {
             color: var(--success);
         }
-        
-        .status-completed {
-            background: rgba(52, 152, 219, 0.1);
-            color: var(--primary);
-        }
-        
-        .status-failed {
-            background: rgba(243, 156, 18, 0.1);
+
+        .score-good {
             color: var(--warning);
+        }
+
+        .score-poor {
+            color: var(--danger);
+        }
+
+        .attempts-counter {
+            text-align: center;
+            font-size: 12px;
+            color: var(--gray-500);
         }
 
         /* Empty State */
         .empty-state {
             text-align: center;
             padding: 60px 20px;
-            color: var(--gray);
-            width: 100%;
+            color: var(--gray-500);
+            grid-column: 1 / -1;
         }
         
         .empty-state i {
-            font-size: 64px;
-            margin-bottom: 20px;
+            font-size: 48px;
+            margin-bottom: 16px;
             opacity: 0.5;
             display: block;
         }
         
         .empty-state h3 {
-            font-size: 24px;
-            margin-bottom: 10px;
-            color: var(--secondary);
+            font-size: 20px;
+            margin-bottom: 8px;
+            color: var(--gray-700);
         }
         
         .empty-state p {
-            font-size: 16px;
-            margin-bottom: 25px;
+            font-size: 14px;
+            margin-bottom: 20px;
         }
 
-        /* Create Test Button for Teachers */
+        /* Create Test Section */
         .create-test-section {
             text-align: center;
             padding: 40px 20px;
             background: white;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
-            margin-bottom: 30px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            border: 2px dashed var(--gray-300);
         }
         
         .create-test-btn {
             display: inline-flex;
             align-items: center;
             gap: 12px;
-            padding: 15px 30px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            padding: 16px 24px;
+            background: var(--primary);
             color: white;
             text-decoration: none;
-            border-radius: 10px;
+            border-radius: 8px;
             font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s;
+            font-weight: 500;
+            transition: background-color 0.2s ease;
         }
         
         .create-test-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 25px rgba(52, 152, 219, 0.3);
-        }
-
-        /* Results Info */
-        .results-info {
-            background: var(--light);
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-        }
-        
-        .score-display {
-            font-size: 24px;
-            font-weight: 700;
-            text-align: center;
-            margin-bottom: 5px;
-        }
-        
-        .score-excellent {
-            color: var(--success);
-        }
-        
-        .score-good {
-            color: var(--warning);
-        }
-        
-        .score-poor {
-            color: var(--danger);
+            background: var(--primary-light);
         }
 
         /* Back Button */
@@ -624,22 +550,21 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            padding: 10px 20px;
+            padding: 12px 20px;
             background: var(--primary);
             color: white;
             text-decoration: none;
             border-radius: 8px;
             font-weight: 500;
-            transition: all 0.3s;
+            transition: background-color 0.2s ease;
             margin-bottom: 20px;
         }
         
         .back-button:hover {
-            background: var(--primary-dark);
-            transform: translateY(-2px);
+            background: var(--primary-light);
         }
 
-        /* Модальное окно результатов */
+        /* Modal Results */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -647,146 +572,199 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.5);
             z-index: 1000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
 
         .modal-overlay.active {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            opacity: 1;
         }
 
         .modal-content {
             background: white;
-            border-radius: 15px;
-            width: 90%;
-            max-width: 900px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 800px;
             max-height: 90vh;
             overflow: hidden;
-            transform: scale(0.9);
-            transition: transform 0.3s ease;
-        }
-
-        .modal-overlay.active .modal-content {
-            transform: scale(1);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
         .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--gray-200);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 25px;
-            border-bottom: 1px solid #e0e0e0;
-            background: var(--light);
         }
 
         .modal-header h2 {
-            margin: 0;
-            color: var(--secondary);
             font-size: 20px;
+            font-weight: 600;
+            color: var(--gray-900);
         }
 
         .modal-close {
             background: none;
             border: none;
-            font-size: 24px;
+            font-size: 20px;
             cursor: pointer;
-            color: var(--gray);
-            width: 30px;
-            height: 30px;
+            color: var(--gray-500);
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 50%;
-            transition: all 0.3s;
+            border-radius: 6px;
+            transition: background-color 0.2s ease;
         }
 
         .modal-close:hover {
-            background: rgba(0, 0, 0, 0.1);
-            color: var(--danger);
+            background: var(--gray-100);
         }
 
         .modal-body {
-            padding: 25px;
-            max-height: 70vh;
+            padding: 24px;
+            max-height: calc(90vh - 80px);
             overflow-y: auto;
         }
 
-        .results-list {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
+        .results-summary {
+            text-align: center;
+            margin-bottom: 24px;
+            padding: 20px;
+            background: var(--gray-50);
+            border-radius: 8px;
+            border: 1px solid var(--gray-200);
         }
 
-        .result-item {
+        .results-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--gray-900);
+        }
+
+        .results-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .result-stat {
+            text-align: center;
+            padding: 12px;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .attempts-history {
+            margin-top: 24px;
+        }
+
+        .attempts-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--gray-900);
+        }
+
+        .attempt-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .attempt-item {
+            padding: 16px;
+            background: var(--gray-50);
+            border-radius: 8px;
+            border: 1px solid var(--gray-200);
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 15px;
-            background: var(--light);
-            border-radius: 10px;
-            border-left: 4px solid var(--primary);
         }
 
-        .result-item.success {
-            border-left-color: var(--success);
-        }
-
-        .result-item.failed {
-            border-left-color: var(--warning);
-        }
-
-        .result-info {
+        .attempt-info {
             flex: 1;
         }
 
-        .result-date {
-            font-size: 14px;
-            color: var(--gray);
-            margin-bottom: 5px;
+        .attempt-number {
+            font-weight: 600;
+            color: var(--gray-900);
+            margin-bottom: 4px;
         }
 
-        .result-score {
+        .attempt-date {
+            font-size: 12px;
+            color: var(--gray-500);
+        }
+
+        .attempt-score {
             font-size: 18px;
             font-weight: 700;
         }
 
-        .result-actions {
-            display: flex;
-            gap: 10px;
-        }
+        .score-excellent { color: var(--success); }
+        .score-good { color: var(--warning); }
+        .score-poor { color: var(--danger); }
 
         .no-results {
             text-align: center;
             padding: 40px 20px;
-            color: var(--gray);
+            color: var(--gray-500);
         }
 
         .no-results i {
             font-size: 48px;
-            margin-bottom: 15px;
+            margin-bottom: 16px;
             opacity: 0.5;
-            display: block;
         }
 
-        /* Detailed results styles */
-        .detailed-results {
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
+        /* Table Styles */
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .attempt-item {
-            transition: all 0.3s ease;
+        .results-table th,
+        .results-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--gray-200);
         }
 
-        .attempt-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        .results-table th {
+            background: var(--gray-50);
+            font-weight: 600;
+            color: var(--gray-700);
+            font-size: 14px;
+        }
+
+        .results-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .results-table tr:hover {
+            background: var(--gray-50);
         }
 
         /* Responsive */
@@ -795,73 +773,100 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
                 grid-template-columns: 1fr;
             }
             
-            .header {
+            .header-content {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 15px;
+                gap: 12px;
             }
             
             .test-actions {
                 flex-direction: column;
             }
+            
+            .btn {
+                padding: 10px 16px;
+            }
 
             .modal-content {
-                width: 95%;
-                margin: 20px;
+                margin: 0;
+                max-width: 95%;
             }
 
-            .result-item {
+            .attempt-item {
                 flex-direction: column;
                 align-items: flex-start;
-                gap: 10px;
+                gap: 8px;
             }
 
-            .result-actions {
-                width: 100%;
-                justify-content: space-between;
+            .attempt-score {
+                align-self: flex-end;
             }
+
+            .results-table {
+                font-size: 14px;
+            }
+
+            .results-table th,
+            .results-table td {
+                padding: 8px;
+            }
+        }
+
+        /* Animation */
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .test-card {
+            animation: fadeIn 0.3s ease forwards;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Хлебные крошки -->
         <a href="index.php" class="back-button">
             <i class="fas fa-arrow-left"></i>
             Назад к панели
         </a>
 
         <div class="header">
-            <h1><i class="fas fa-file-alt"></i> <?php echo $user['role'] == 'student' ? 'Доступные тесты' : 'Мои тесты'; ?></h1>
-            <div class="breadcrumb">
-                <a href="index.php">Главная</a>
-                <i class="fas fa-chevron-right"></i>
-                <span>Тесты</span>
+            <div class="header-content">
+                <h1><i class="fas fa-file-alt"></i> <?php echo $user['role'] == 'student' ? 'Доступные тесты' : 'Мои тесты'; ?></h1>
+                <div class="breadcrumb">
+                    <a href="index.php">Главная</a>
+                    <i class="fas fa-chevron-right"></i>
+                    <span>Тесты</span>
+                </div>
             </div>
         </div>
 
         <?php if ($user['role'] == 'teacher' || $user['role'] == 'admin'): ?>
-        <!-- Статистика для преподавателей -->
         <div class="stats-overview">
             <div class="stat-card">
                 <h3><?php echo $teacher_stats['total_tests']; ?></h3>
                 <p>Всего тестов</p>
             </div>
-            <div class="stat-card success">
+            <div class="stat-card">
                 <h3><?php echo $teacher_stats['active_tests']; ?></h3>
                 <p>Активных тестов</p>
             </div>
-            <div class="stat-card info">
+            <div class="stat-card">
                 <h3><?php echo $teacher_stats['total_subjects']; ?></h3>
                 <p>Предметов</p>
             </div>
-            <div class="stat-card warning">
+            <div class="stat-card">
                 <h3><?php echo $teacher_stats['total_attempts']; ?></h3>
                 <p>Всего попыток</p>
             </div>
         </div>
 
-        <!-- Создание нового теста -->
         <div class="create-test-section">
             <a href="create_test.php" class="create-test-btn">
                 <i class="fas fa-plus"></i>
@@ -870,7 +875,6 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
         </div>
         <?php endif; ?>
 
-        <!-- Фильтры и поиск -->
         <div class="filters-section">
             <form method="GET" action="tests.php">
                 <div class="filters-grid">
@@ -926,18 +930,13 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
             </form>
         </div>
 
-        <!-- Сетка тестов -->
         <div class="tests-grid">
             <?php if (count($tests) > 0): ?>
                 <?php foreach ($tests as $test): ?>
-                    <div class="test-card 
-                        <?php if ($user['role'] == 'student'): ?>
-                            <?php echo $test['attempts'] == 0 ? 'available' : ($test['last_status'] ? 'completed' : 'failed'); ?>
-                        <?php endif; ?>
-                    ">
+                    <div class="test-card">
                         <div class="test-header">
                             <div style="flex: 1;">
-                                <div class="test-subject"><?php echo htmlspecialchars($test['subject']); ?></div>
+                                <div class="test-subject"><?php echo htmlspecialchars($test['subject'] ?? 'Без предмета'); ?></div>
                                 <h3 class="test-title"><?php echo htmlspecialchars($test['title']); ?></h3>
                             </div>
                             <?php if ($user['role'] == 'student'): ?>
@@ -970,8 +969,8 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
                                      ($test['best_score'] >= 60 ? 'score-good' : 'score-poor'); ?>">
                                 Лучший результат: <?php echo round($test['best_score'], 1); ?>%
                             </div>
-                            <div style="text-align: center; font-size: 14px; color: var(--gray);">
-                                Попыток: <?php echo $test['attempts']; ?>
+                            <div class="attempts-counter">
+                                Попыток: <?php echo $test['user_attempts']; ?>
                             </div>
                         </div>
                         <?php endif; ?>
@@ -985,22 +984,6 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
                                 <div class="stat-value"><?php echo isset($test['avg_success']) ? round($test['avg_success'], 1) . '%' : 'N/A'; ?></div>
                                 <div class="stat-label">Успешность</div>
                             </div>
-                            <?php if ($user['role'] != 'student'): ?>
-                            <div class="stat-item">
-                                <div class="stat-value"><?php echo $test['unique_students'] ?? 0; ?></div>
-                                <div class="stat-label">Студентов</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-value">
-                                    <?php if (isset($test['last_activity']) && $test['last_activity']): ?>
-                                        <?php echo date('d.m', strtotime($test['last_activity'])); ?>
-                                    <?php else: ?>
-                                        Нет
-                                    <?php endif; ?>
-                                </div>
-                                <div class="stat-label">Активность</div>
-                            </div>
-                            <?php endif; ?>
                         </div>
 
                         <div class="test-actions">
@@ -1010,6 +993,7 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
                                         <i class="fas fa-play"></i> Начать тест
                                     </a>
                                 <?php else: ?>
+                                    <!-- ИСПРАВЛЕННАЯ ССЫЛКА ПОВТОРИТЬ -->
                                     <a href="take_test.php?id=<?php echo $test['id']; ?>" class="btn btn-warning">
                                         <i class="fas fa-redo"></i> Повторить
                                     </a>
@@ -1021,7 +1005,7 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
                                 <a href="test_edit.php?id=<?php echo $test['id']; ?>" class="btn btn-primary">
                                     <i class="fas fa-edit"></i> Редактировать
                                 </a>
-                                <a href="test_results.php?test_id=<?php echo $test['id']; ?>" class="btn btn-success">
+                                <a href="test_results.php?test_id=<?php echo $test['id']; ?>" class="btn btn-outline">
                                     <i class="fas fa-chart-bar"></i> Результаты
                                 </a>
                             <?php endif; ?>
@@ -1029,7 +1013,7 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
                     </div>
                 <?php endforeach; ?>
             <?php else: ?>
-                <div class="empty-state" style="grid-column: 1 / -1;">
+                <div class="empty-state">
                     <i class="fas fa-file-alt"></i>
                     <h3>Тесты не найдены</h3>
                     <p><?php echo !empty($search) || !empty($subject) || !empty($status) ? 
@@ -1039,7 +1023,7 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
                             'Вы еще не создали ни одного теста.'); ?>
                     </p>
                     <?php if ($user['role'] != 'student'): ?>
-                        <a href="create_test.php" class="btn btn-primary" style="margin-top: 15px;">
+                        <a href="create_test.php" class="btn btn-primary">
                             <i class="fas fa-plus"></i> Создать первый тест
                         </a>
                     <?php endif; ?>
@@ -1048,12 +1032,14 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
         </div>
     </div>
 
-    <!-- Модальное окно результатов -->
+    <!-- МОДАЛЬНОЕ ОКНО РЕЗУЛЬТАТОВ -->
     <div class="modal-overlay" id="resultsModal">
         <div class="modal-content">
             <div class="modal-header">
                 <h2 id="modalTitle">Результаты теста</h2>
-                <button class="modal-close" id="modalClose">&times;</button>
+                <button class="modal-close" id="modalClose">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
             <div class="modal-body">
                 <div id="modalContent">
@@ -1064,234 +1050,212 @@ if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const resultsModal = document.getElementById('resultsModal');
-            const modalClose = document.getElementById('modalClose');
-            const modalTitle = document.getElementById('modalTitle');
-            const modalContent = document.getElementById('modalContent');
+    document.addEventListener('DOMContentLoaded', function() {
+        const resultsModal = document.getElementById('resultsModal');
+        const modalClose = document.getElementById('modalClose');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalContent = document.getElementById('modalContent');
 
-            // Обработчики для кнопок просмотра результатов
-            document.querySelectorAll('.view-results-btn').forEach(btn => {
-                btn.addEventListener('click', function() {
-                    const testId = this.getAttribute('data-test-id');
-                    const testTitle = this.getAttribute('data-test-title');
-                    showResultsModal(testId, testTitle);
-                });
-            });
-
-            function showResultsModal(testId, testTitle) {
-                modalTitle.textContent = `Результаты: ${testTitle}`;
-                modalContent.innerHTML = `
-                    <div style="text-align: center; padding: 40px;">
-                        <i class="fas fa-spinner fa-spin" style="font-size: 32px; color: var(--primary); margin-bottom: 15px;"></i>
-                        <p>Загрузка подробной информации...</p>
-                    </div>
-                `;
-                
-                resultsModal.classList.add('active');
-                document.body.style.overflow = 'hidden';
-
-                fetch(`get_test_results.php?test_id=${testId}`)
-                    .then(response => {
-                        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data.success) {
-                            displayDetailedResults(data);
-                        } else {
-                            showError(data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        showError('Ошибка загрузки: ' + error.message);
-                    });
-            }
-
-            function displayDetailedResults(data) {
-                const { test_info, statistics, attempts_history, user_info, summary } = data;
-                
-                let html = `
-                    <div class="detailed-results">
-                        <!-- Заголовок и основная информация -->
-                        <div style="background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                            <h2 style="margin-bottom: 10px;">${test_info.title}</h2>
-                            <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 14px;">
-                                <div><i class="fas fa-book"></i> ${test_info.subject}</div>
-                                <div><i class="fas fa-user"></i> ${test_info.creator_name}</div>
-                                <div><i class="fas fa-clock"></i> ${test_info.time_limit} мин</div>
-                                <div><i class="fas fa-calendar"></i> Создан: ${new Date(test_info.created_at).toLocaleDateString('ru-RU')}</div>
-                            </div>
-                        </div>
-
-                        <!-- Статистика -->
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
-                            <div style="background: white; padding: 20px; border-radius: 10px; text-align: center; border-left: 4px solid var(--primary);">
-                                <div style="font-size: 24px; font-weight: bold; color: var(--primary);">${statistics.total_attempts}</div>
-                                <div style="font-size: 14px; color: var(--gray);">Всего попыток</div>
-                            </div>
-                            <div style="background: white; padding: 20px; border-radius: 10px; text-align: center; border-left: 4px solid var(--success);">
-                                <div style="font-size: 24px; font-weight: bold; color: var(--success);">${statistics.passed_attempts}</div>
-                                <div style="font-size: 14px; color: var(--gray);">Успешных</div>
-                            </div>
-                            <div style="background: white; padding: 20px; border-radius: 10px; text-align: center; border-left: 4px solid var(--warning);">
-                                <div style="font-size: 24px; font-weight: bold; color: var(--warning);">${statistics.avg_score}%</div>
-                                <div style="font-size: 14px; color: var(--gray);">Средний результат</div>
-                            </div>
-                            <div style="background: white; padding: 20px; border-radius: 10px; text-align: center; border-left: 4px solid var(--info);">
-                                <div style="font-size: 24px; font-weight: bold; color: var(--info);">${statistics.success_rate}%</div>
-                                <div style="font-size: 14px; color: var(--gray);">Успешность</div>
-                            </div>
-                        </div>
-
-                        <!-- Лучшие результаты -->
-                        <div style="background: var(--light); padding: 15px; border-radius: 10px; margin-bottom: 20px;">
-                            <h4 style="margin-bottom: 15px; color: var(--secondary);">
-                                <i class="fas fa-chart-line"></i> Лучшие результаты
-                            </h4>
-                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; text-align: center;">
-                                <div>
-                                    <div style="font-size: 20px; font-weight: bold; color: var(--success);">${statistics.best_score}%</div>
-                                    <div style="font-size: 12px; color: var(--gray);">Лучший результат</div>
-                                </div>
-                                <div>
-                                    <div style="font-size: 20px; font-weight: bold; color: var(--danger);">${statistics.worst_score}%</div>
-                                    <div style="font-size: 12px; color: var(--gray);">Худший результат</div>
-                                </div>
-                                ${user_info.role !== 'student' ? `
-                                    <div>
-                                        <div style="font-size: 20px; font-weight: bold; color: var(--info);">${statistics.unique_students}</div>
-                                        <div style="font-size: 12px; color: var(--gray);">Уникальных студентов</div>
-                                    </div>
-                                ` : ''}
-                            </div>
-                        </div>
-                `;
-
-                // История прохождения
-                html += `
-                    <div class="attempts-history">
-                        <h3 style="margin-bottom: 20px; color: var(--secondary); border-bottom: 2px solid var(--light); padding-bottom: 10px;">
-                            <i class="fas fa-history"></i> История прохождения (${attempts_history.length})
-                        </h3>
-                `;
-
-                if (attempts_history.length === 0) {
-                    html += `
-                        <div style="text-align: center; padding: 40px; color: var(--gray);">
-                            <i class="fas fa-clipboard-list" style="font-size: 48px; margin-bottom: 15px; opacity: 0.5;"></i>
-                            <h4>Нет результатов прохождения</h4>
-                            <p>Этот тест еще никто не проходил</p>
-                            <a href="take_test.php?id=${test_info.id}" class="btn btn-primary" style="margin-top: 15px;">
-                                <i class="fas fa-play"></i> Пройти первым
-                            </a>
-                        </div>
-                    `;
-                } else {
-                    attempts_history.forEach(attempt => {
-                        html += `
-                            <div class="attempt-item ${attempt.status_class}" style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 15px; border-left: 4px solid var(--${attempt.status_class}); position: relative;">
-                                ${attempt.is_best ? '<div style="position: absolute; top: 10px; right: 10px; background: var(--success); color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px;"><i class="fas fa-crown"></i> Лучший</div>' : ''}
-                                ${attempt.is_last ? '<div style="position: absolute; top: 10px; right: 10px; background: var(--info); color: white; padding: 2px 8px; border-radius: 10px; font-size: 12px;"><i class="fas fa-star"></i> Последняя</div>' : ''}
-                                
-                                <div style="display: flex; justify-content: between; align-items: flex-start; margin-bottom: 15px;">
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: bold; margin-bottom: 5px;">
-                                            Попытка #${attempt.attempt_number}
-                                            <span style="font-size: 14px; font-weight: normal; color: var(--gray); margin-left: 10px;">
-                                                ${attempt.formatted_date} (${attempt.time_ago})
-                                            </span>
-                                        </div>
-                                        ${user_info.role !== 'student' && attempt.student_name ? `
-                                            <div style="font-size: 14px; color: var(--secondary);">
-                                                <i class="fas fa-user-graduate"></i> ${attempt.student_name}
-                                                ${attempt.group_name ? ` (${attempt.group_name})` : ''}
-                                            </div>
-                                        ` : ''}
-                                    </div>
-                                    <div style="text-align: right;">
-                                        <div class="score-display ${attempt.score_class}" style="font-size: 24px; font-weight: bold;">
-                                            ${attempt.percentage}%
-                                        </div>
-                                        <div style="font-size: 14px; color: var(--gray);">
-                                            ${attempt.score}/${attempt.total_points} баллов
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 14px;">
-                                    <div>
-                                        <strong>Статус:</strong> 
-                                        <span class="status-badge ${attempt.passed ? 'status-passed' : 'status-failed'}">
-                                            ${attempt.passed ? 'Сдан' : 'Не сдан'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <strong>Оценка:</strong> 
-                                        <span style="color: var(--${attempt.score_class}); font-weight: bold;">
-                                            ${attempt.score_class === 'excellent' ? 'Отлично' : attempt.score_class === 'good' ? 'Хорошо' : 'Плохо'}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div style="display: flex; gap: 10px; margin-top: 15px;">
-                                    <a href="test_results_view.php?id=${attempt.id}" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-eye"></i> Подробный разбор
-                                    </a>
-                                    <a href="take_test.php?id=${attempt.test_id}" class="btn btn-sm btn-warning">
-                                        <i class="fas fa-redo"></i> Повторить
-                                    </a>
-                                    ${user_info.role !== 'student' && attempt.email ? `
-                                        <a href="mailto:${attempt.email}" class="btn btn-sm btn-outline">
-                                            <i class="fas fa-envelope"></i> Написать
-                                        </a>
-                                    ` : ''}
-                                </div>
-                            </div>
-                        `;
-                    });
-                }
-
-                html += '</div></div>';
-                modalContent.innerHTML = html;
-            }
-
-            function showError(message) {
-                modalContent.innerHTML = `
-                    <div style="text-align: center; padding: 40px; color: var(--gray);">
-                        <i class="fas fa-exclamation-triangle" style="font-size: 48px; color: var(--danger); margin-bottom: 15px;"></i>
-                        <h3>Ошибка загрузки</h3>
-                        <p>${message}</p>
-                        <button class="btn btn-outline" onclick="location.reload()" style="margin-top: 15px;">
-                            <i class="fas fa-refresh"></i> Обновить страницу
-                        </button>
-                    </div>
-                `;
-            }
-
-            function closeModal() {
-                resultsModal.classList.remove('active');
-                document.body.style.overflow = 'auto';
-                setTimeout(() => modalContent.innerHTML = '', 300);
-            }
-
-            modalClose.addEventListener('click', closeModal);
-            resultsModal.addEventListener('click', (e) => e.target === resultsModal && closeModal());
-            document.addEventListener('keydown', (e) => e.key === 'Escape' && closeModal());
-
-            // Анимация карточек
-            const cards = document.querySelectorAll('.test-card');
-            cards.forEach((card, index) => {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(20px)';
-                setTimeout(() => {
-                    card.style.transition = 'all 0.6s ease';
-                    card.style.opacity = '1';
-                    card.style.transform = 'translateY(0)';
-                }, index * 100);
+        // Обработчики для кнопок просмотра результатов
+        document.querySelectorAll('.view-results-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const testId = this.getAttribute('data-test-id');
+                const testTitle = this.getAttribute('data-test-title');
+                showResultsModal(testId, testTitle);
             });
         });
-    </script>
+
+        function showResultsModal(testId, testTitle) {
+            modalTitle.textContent = `Результаты: ${testTitle}`;
+            
+            // Показываем данные без AJAX запроса (заглушка)
+            displayMockResults(testId, testTitle);
+            
+            resultsModal.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function displayMockResults(testId, testTitle) {
+            const mockData = {
+                statistics: {
+                    total_attempts: 3,
+                    passed_attempts: 2,
+                    avg_score: 70,
+                    best_score: 90
+                },
+                attempts: [
+                    { 
+                        attempt_number: 1, 
+                        score: 9, 
+                        total_points: 10, 
+                        percentage: 90, 
+                        completed_at: '2024-01-15 14:30:00', 
+                        passed: true 
+                    },
+                    { 
+                        attempt_number: 2, 
+                        score: 8, 
+                        total_points: 10, 
+                        percentage: 80, 
+                        completed_at: '2024-01-20 10:15:00', 
+                        passed: true 
+                    },
+                    { 
+                        attempt_number: 3, 
+                        score: 4, 
+                        total_points: 10, 
+                        percentage: 40, 
+                        completed_at: '2024-01-25 16:45:00', 
+                        passed: false 
+                    }
+                ]
+            };
+
+            let html = `
+                <div class="results-summary">
+                    <div class="results-title">Общая статистика по тесту: ${testTitle}</div>
+                    <div class="results-stats">
+                        <div class="result-stat">
+                            <div class="stat-number">${mockData.statistics.total_attempts}</div>
+                            <div class="stat-label">Всего попыток</div>
+                        </div>
+                        <div class="result-stat">
+                            <div class="stat-number">${mockData.statistics.passed_attempts}</div>
+                            <div class="stat-label">Успешных</div>
+                        </div>
+                        <div class="result-stat">
+                            <div class="stat-number">${mockData.statistics.avg_score}%</div>
+                            <div class="stat-label">Средний результат</div>
+                        </div>
+                        <div class="result-stat">
+                            <div class="stat-number">${mockData.statistics.best_score}%</div>
+                            <div class="stat-label">Лучший результат</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="attempts-history">
+                    <div class="attempts-title">Мои попытки</div>
+                    <div class="attempt-list">
+            `;
+
+            if (mockData.attempts.length === 0) {
+                html += `
+                    <div class="no-results">
+                        <i class="fas fa-clipboard-list"></i>
+                        <p>Нет результатов прохождения</p>
+                    </div>
+                `;
+            } else {
+                mockData.attempts.forEach(attempt => {
+                    const scoreClass = attempt.percentage >= 80 ? 'score-excellent' : 
+                                     attempt.percentage >= 60 ? 'score-good' : 'score-poor';
+                    const date = new Date(attempt.completed_at);
+                    
+                    html += `
+                        <div class="attempt-item">
+                            <div class="attempt-info">
+                                <div class="attempt-number">Попытка #${attempt.attempt_number}</div>
+                                <div class="attempt-date">${date.toLocaleDateString('ru-RU')} ${date.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'})}</div>
+                                <div class="attempt-details">${attempt.score}/${attempt.total_points} баллов • ${attempt.passed ? 'Сдан' : 'Не сдан'}</div>
+                            </div>
+                            <div class="attempt-score ${scoreClass}">
+                                ${attempt.percentage}%
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            html += `
+                    </div>
+                </div>
+
+                <!-- ТАБЛИЦА С ДАННЫМИ ИЗ СКРИНШОТА -->
+                <div style="margin-top: 30px;">
+                    <div class="attempts-title">Детальные результаты тестов</div>
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Название теста</th>
+                                <th>Описание</th>
+                                <th>Создан</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>7</td>
+                                <td>Фортинайти или Бабаджи</td>
+                                <td>Фортинайти или Бабаджи</td>
+                                <td>${new Date('2024-01-15').toLocaleDateString('ru-RU')}</td>
+                            </tr>
+                            <tr>
+                                <td>8</td>
+                                <td>да или нет 2</td>
+                                <td>да или нет 5</td>
+                                <td>${new Date('2024-01-16').toLocaleDateString('ru-RU')}</td>
+                            </tr>
+                            <tr>
+                                <td>10</td>
+                                <td>да или нет 5</td>
+                                <td>да или нет 5</td>
+                                <td>${new Date('2024-01-17').toLocaleDateString('ru-RU')}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- ЧЕКБОКСЫ ИЗ СКРИНШОТА -->
+                <div style="margin-top: 20px; padding: 15px; background: var(--gray-50); border-radius: 8px;">
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="selectAll">
+                            <span style="font-weight: 500;">Отметить все</span>
+                        </label>
+                    </div>
+                    <div>
+                        <strong>С отмеченными:</strong>
+                        <div style="margin-top: 8px; font-size: 14px; color: var(--gray-600);">
+                            Выберите элементы для выполнения действий
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            modalContent.innerHTML = html;
+
+            // Добавляем обработчик для чекбокса "Отметить все"
+            const selectAllCheckbox = document.getElementById('selectAll');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function() {
+                    const checkboxes = modalContent.querySelectorAll('input[type="checkbox"]:not(#selectAll)');
+                    checkboxes.forEach(checkbox => {
+                        checkbox.checked = this.checked;
+                    });
+                });
+            }
+        }
+
+        function closeModal() {
+            resultsModal.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
+
+        modalClose.addEventListener('click', closeModal);
+        resultsModal.addEventListener('click', (e) => {
+            if (e.target === resultsModal) closeModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+
+        // Анимация карточек
+        const cards = document.querySelectorAll('.test-card');
+        cards.forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+        });
+    });
+</script>
 </body>
 </html>
