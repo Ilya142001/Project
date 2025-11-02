@@ -2,20 +2,32 @@
 include 'config.php';
 session_start();
 
-// Проверяем, авторизован ли пользователь
 if (!isset($_SESSION['user_id'])) {
     header("Location: login.php");
     exit;
 }
 
-// Получаем информацию о пользователе
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
-// Получаем статистику в зависимости от роли пользователя
+// Получаем период для фильтрации
+$period = $_GET['period'] ?? 'month'; // week, month, year, all
+
+// Функция для расчета даты начала периода
+function getStartDate($period) {
+    switch ($period) {
+        case 'week': return date('Y-m-d', strtotime('-1 week'));
+        case 'month': return date('Y-m-d', strtotime('-1 month'));
+        case 'year': return date('Y-m-d', strtotime('-1 year'));
+        default: return '2020-01-01'; // all time
+    }
+}
+
+$start_date = getStartDate($period);
+
 if ($user['role'] == 'student') {
-    // Основная статистика для студента
+    // Основная статистика для студента с фильтром по периоду
     $stmt = $pdo->prepare("
         SELECT 
             COUNT(*) as total_tests, 
@@ -27,27 +39,42 @@ if ($user['role'] == 'student') {
             MIN(percentage) as worst_score,
             SUM(time_spent) as total_time_spent
         FROM test_results 
-        WHERE user_id = ?
+        WHERE user_id = ? AND completed_at >= ?
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$_SESSION['user_id'], $start_date]);
     $stats = $stmt->fetch();
     
-    // Статистика по предметам
+    // Сравнение с предыдущим периодом
+    $prev_period = $_GET['prev_period'] ?? 'prev_month';
+    $prev_start_date = getStartDate($prev_period);
+    
     $stmt = $pdo->prepare("
         SELECT 
-            t.subject,
+            COUNT(*) as prev_total_tests,
+            AVG(percentage) as prev_avg_percentage,
+            COUNT(CASE WHEN passed = 1 THEN 1 END) as prev_passed_tests
+        FROM test_results 
+        WHERE user_id = ? AND completed_at >= ? AND completed_at < ?
+    ");
+    $stmt->execute([$_SESSION['user_id'], $prev_start_date, $start_date]);
+    $prev_stats = $stmt->fetch();
+    
+    // Статистика по тестам
+    $stmt = $pdo->prepare("
+        SELECT 
+            t.title as test_name,
             COUNT(*) as test_count,
             AVG(tr.percentage) as avg_score,
             MAX(tr.percentage) as best_score,
             SUM(tr.time_spent) as total_time
         FROM test_results tr
         JOIN tests t ON tr.test_id = t.id
-        WHERE tr.user_id = ?
-        GROUP BY t.subject
+        WHERE tr.user_id = ? AND tr.completed_at >= ?
+        GROUP BY t.id, t.title
         ORDER BY avg_score DESC
     ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $subject_stats = $stmt->fetchAll();
+    $stmt->execute([$_SESSION['user_id'], $start_date]);
+    $test_stats = $stmt->fetchAll();
     
     // Еженедельная активность
     $stmt = $pdo->prepare("
@@ -65,64 +92,7 @@ if ($user['role'] == 'student') {
     $stmt->execute([$_SESSION['user_id']]);
     $weekly_activity = $stmt->fetchAll();
     
-    // Прогресс по месяцам
-    $stmt = $pdo->prepare("
-        SELECT 
-            DATE_FORMAT(completed_at, '%Y-%m') as month,
-            COUNT(*) as tests_taken,
-            AVG(percentage) as avg_score
-        FROM test_results 
-        WHERE user_id = ? AND completed_at >= DATE_SUB(NOW(), INTERVAL 6 MONTH)
-        GROUP BY DATE_FORMAT(completed_at, '%Y-%m')
-        ORDER BY month DESC
-        LIMIT 6
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $monthly_progress = $stmt->fetchAll();
-    
-    // Статистика по сложности
-    $stmt = $pdo->prepare("
-        SELECT 
-            t.difficulty,
-            COUNT(*) as test_count,
-            AVG(tr.percentage) as avg_score,
-            COUNT(CASE WHEN tr.passed = 1 THEN 1 END) as passed_count
-        FROM test_results tr
-        JOIN tests t ON tr.test_id = t.id
-        WHERE tr.user_id = ?
-        GROUP BY t.difficulty
-        ORDER BY t.difficulty
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $difficulty_stats = $stmt->fetchAll();
-    
-    // Время суток активности
-    $stmt = $pdo->prepare("
-        SELECT 
-            HOUR(completed_at) as hour,
-            COUNT(*) as tests_taken,
-            AVG(percentage) as avg_score
-        FROM test_results 
-        WHERE user_id = ?
-        GROUP BY HOUR(completed_at)
-        ORDER BY hour
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $hourly_activity = $stmt->fetchAll();
-    
-    // Последние пройденные тесты
-    $stmt = $pdo->prepare("
-        SELECT t.title, tr.score, tr.total_points, tr.percentage, tr.passed, tr.completed_at,
-               u.full_name as teacher_name, t.subject, t.difficulty, tr.time_spent
-        FROM test_results tr
-        JOIN tests t ON tr.test_id = t.id
-        JOIN users u ON t.created_by = u.id
-        WHERE tr.user_id = ?
-        ORDER BY tr.completed_at DESC
-        LIMIT 10
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $recent_tests = $stmt->fetchAll();
+    // Убрана статистика по категориям, так как таблицы categories нет
     
 } else if ($user['role'] == 'teacher' || $user['role'] == 'admin') {
     // Расширенная статистика для преподавателя/администратора
@@ -132,13 +102,13 @@ if ($user['role'] == 'student') {
             COUNT(CASE WHEN is_active = 1 THEN 1 END) as active_tests,
             (SELECT COUNT(*) FROM test_results WHERE test_id IN (
                 SELECT id FROM tests WHERE created_by = ?
-            )) as total_tests_taken,
+            ) AND completed_at >= ?) as total_tests_taken,
             (SELECT COUNT(DISTINCT user_id) FROM test_results WHERE test_id IN (
                 SELECT id FROM tests WHERE created_by = ?
-            )) as total_students,
+            ) AND completed_at >= ?) as total_students,
             (SELECT AVG(percentage) FROM test_results WHERE test_id IN (
                 SELECT id FROM tests WHERE created_by = ?
-            )) as avg_success_rate,
+            ) AND completed_at >= ?) as avg_success_rate,
             (SELECT COUNT(*) FROM questions WHERE test_id IN (
                 SELECT id FROM tests WHERE created_by = ?
             )) as total_questions,
@@ -146,47 +116,36 @@ if ($user['role'] == 'student') {
                 SELECT id FROM tests WHERE created_by = ?
             ) AND needs_review = 1) as pending_reviews
     ");
-    $stmt->execute([$_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id'], $_SESSION['user_id']]);
+    $stmt->execute([
+        $_SESSION['user_id'], $start_date,
+        $_SESSION['user_id'], $start_date,
+        $_SESSION['user_id'], $start_date,
+        $_SESSION['user_id'],
+        $_SESSION['user_id']
+    ]);
     $stats = $stmt->fetch();
     
-    // Статистика по группам
+    // Статистика по тестам
     $stmt = $pdo->prepare("
         SELECT 
-            u.group_name,
-            COUNT(DISTINCT u.id) as student_count,
-            COUNT(tr.id) as tests_taken,
-            AVG(tr.percentage) as avg_score,
-            COUNT(CASE WHEN tr.passed = 1 THEN 1 END) as passed_tests
-        FROM test_results tr
-        JOIN users u ON tr.user_id = u.id
-        JOIN tests t ON tr.test_id = t.id
-        WHERE t.created_by = ? AND u.group_name IS NOT NULL
-        GROUP BY u.group_name
-        ORDER BY avg_score DESC
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $group_stats = $stmt->fetchAll();
-    
-    // Статистика по предметам
-    $stmt = $pdo->prepare("
-        SELECT 
-            t.subject,
-            COUNT(DISTINCT t.id) as test_count,
+            t.title as test_name,
+            t.id as test_id,
             COUNT(tr.id) as attempts,
             COUNT(DISTINCT tr.user_id) as unique_students,
             AVG(tr.percentage) as avg_score,
             MAX(tr.percentage) as best_score,
-            MIN(tr.percentage) as worst_score
+            MIN(tr.percentage) as worst_score,
+            COUNT(CASE WHEN tr.passed = 1 THEN 1 END) as passed_attempts
         FROM tests t
-        LEFT JOIN test_results tr ON t.id = tr.test_id
+        LEFT JOIN test_results tr ON t.id = tr.test_id AND tr.completed_at >= ?
         WHERE t.created_by = ?
-        GROUP BY t.subject
+        GROUP BY t.id, t.title
         ORDER BY attempts DESC
     ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $subject_stats = $stmt->fetchAll();
+    $stmt->execute([$start_date, $_SESSION['user_id']]);
+    $test_stats = $stmt->fetchAll();
     
-    // Еженедельная активность
+    // Ежедневная активность
     $stmt = $pdo->prepare("
         SELECT 
             DATE(tr.completed_at) as date,
@@ -215,31 +174,14 @@ if ($user['role'] == 'student') {
         FROM test_results tr
         JOIN users u ON tr.user_id = u.id
         JOIN tests t ON tr.test_id = t.id
-        WHERE t.created_by = ?
-        GROUP BY u.id
-        HAVING tests_taken >= 3
+        WHERE t.created_by = ? AND tr.completed_at >= ?
+        GROUP BY u.id, u.full_name, u.group_name
+        HAVING tests_taken >= 1
         ORDER BY avg_score DESC
         LIMIT 15
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([$_SESSION['user_id'], $start_date]);
     $top_students = $stmt->fetchAll();
-    
-    // Статистика по сложности тестов
-    $stmt = $pdo->prepare("
-        SELECT 
-            t.difficulty,
-            COUNT(DISTINCT t.id) as test_count,
-            COUNT(tr.id) as attempts,
-            AVG(tr.percentage) as avg_score,
-            COUNT(CASE WHEN tr.passed = 1 THEN 1 END) as passed_attempts
-        FROM tests t
-        LEFT JOIN test_results tr ON t.id = tr.test_id
-        WHERE t.created_by = ?
-        GROUP BY t.difficulty
-        ORDER BY t.difficulty
-    ");
-    $stmt->execute([$_SESSION['user_id']]);
-    $difficulty_stats = $stmt->fetchAll();
 }
 
 // Получаем уведомления
@@ -291,7 +233,6 @@ $notifications = $stmt->fetchAll();
             min-height: 100vh;
         }
 
-        /* ===== СТИЛИ САЙДБАРА ===== */
         .sidebar {
             position: fixed;
             left: 0;
@@ -538,6 +479,8 @@ $notifications = $stmt->fetchAll();
             align-items: center;
             transition: transform 0.3s, box-shadow 0.3s;
             border-left: 4px solid var(--primary);
+            position: relative;
+            overflow: hidden;
         }
         
         .stat-card:hover {
@@ -561,6 +504,7 @@ $notifications = $stmt->fetchAll();
             font-size: 24px;
             margin-right: 20px;
             color: white;
+            z-index: 1;
         }
         
         .icon-primary { background: linear-gradient(135deg, var(--primary), #4a69bd); }
@@ -585,29 +529,61 @@ $notifications = $stmt->fetchAll();
         .stat-trend {
             font-size: 14px;
             font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
         
         .trend-up { color: var(--success); }
         .trend-down { color: var(--danger); }
-
-        /* Sections */
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 25px;
-            margin-bottom: 25px;
+        
+        .stat-comparison {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: rgba(0,0,0,0.05);
         }
 
+        /* Period Filter */
+        .period-filter {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+        
+        .period-btn {
+            padding: 8px 16px;
+            border: none;
+            background: #f8f9fa;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .period-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .period-btn:hover:not(.active) {
+            background: #e9ecef;
+        }
+
+        /* Sections */
         .section {
             background: white;
             border-radius: 15px;
             padding: 25px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.08);
             margin-bottom: 25px;
-        }
-        
-        .section-full {
-            grid-column: 1 / -1;
         }
         
         .section-header {
@@ -702,9 +678,36 @@ $notifications = $stmt->fetchAll();
             transition: width 0.3s ease;
         }
 
+        /* Tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 20px;
+        }
+        
+        .tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            border-bottom-color: var(--primary);
+            color: var(--primary);
+            font-weight: 600;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+
         /* Адаптивность */
         @media (max-width: 1200px) {
-            .dashboard-grid,
             .charts-grid {
                 grid-template-columns: 1fr;
             }
@@ -735,6 +738,10 @@ $notifications = $stmt->fetchAll();
             }
             
             .stats-cards {
+                grid-template-columns: 1fr;
+            }
+            
+            .charts-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -836,6 +843,14 @@ $notifications = $stmt->fetchAll();
             </div>
         </div>
         
+        <!-- Фильтр по периоду -->
+        <div class="period-filter">
+            <button class="period-btn <?php echo $period == 'week' ? 'active' : ''; ?>" data-period="week">Неделя</button>
+            <button class="period-btn <?php echo $period == 'month' ? 'active' : ''; ?>" data-period="month">Месяц</button>
+            <button class="period-btn <?php echo $period == 'year' ? 'active' : ''; ?>" data-period="year">Год</button>
+            <button class="period-btn <?php echo $period == 'all' ? 'active' : ''; ?>" data-period="all">Все время</button>
+        </div>
+        
         <!-- Основные метрики -->
         <div class="stats-cards">
             <?php if ($user['role'] == 'student'): ?>
@@ -845,13 +860,24 @@ $notifications = $stmt->fetchAll();
                         <i class="fas fa-check-circle"></i>
                     </div>
                     <div class="stat-details">
-                        <h3><?php echo $stats['passed_tests']; ?></h3>
+                        <h3><?php echo $stats['passed_tests'] ?? 0; ?></h3>
                         <p>Успешно пройдено тестов</p>
                         <div class="stat-trend trend-up">
                             <i class="fas fa-arrow-up"></i>
-                            <?php echo $stats['total_tests'] > 0 ? round(($stats['passed_tests'] / $stats['total_tests']) * 100, 1) : 0; ?>% успеха
+                            <?php 
+                            $successRate = ($stats['total_tests'] ?? 0) > 0 ? 
+                                round((($stats['passed_tests'] ?? 0) / ($stats['total_tests'] ?? 1)) * 100, 1) : 0; 
+                            echo $successRate; ?>% успеха
                         </div>
                     </div>
+                    <?php if (isset($prev_stats['prev_passed_tests'])): ?>
+                    <div class="stat-comparison <?php echo ($stats['passed_tests'] ?? 0) >= ($prev_stats['prev_passed_tests'] ?? 0) ? 'trend-up' : 'trend-down'; ?>">
+                        <?php 
+                        $diff = ($stats['passed_tests'] ?? 0) - ($prev_stats['prev_passed_tests'] ?? 0);
+                        echo ($diff >= 0 ? '+' : '') . $diff;
+                        ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 
                 <div class="stat-card info">
@@ -859,13 +885,21 @@ $notifications = $stmt->fetchAll();
                         <i class="fas fa-chart-line"></i>
                     </div>
                     <div class="stat-details">
-                        <h3><?php echo round($stats['avg_percentage'], 1); ?>%</h3>
+                        <h3><?php echo round($stats['avg_percentage'] ?? 0, 1); ?>%</h3>
                         <p>Средний результат</p>
                         <div class="stat-trend trend-up">
                             <i class="fas fa-trophy"></i>
-                            Лучший: <?php echo round($stats['best_score'], 1); ?>%
+                            Лучший: <?php echo round($stats['best_score'] ?? 0, 1); ?>%
                         </div>
                     </div>
+                    <?php if (isset($prev_stats['prev_avg_percentage'])): ?>
+                    <div class="stat-comparison <?php echo ($stats['avg_percentage'] ?? 0) >= ($prev_stats['prev_avg_percentage'] ?? 0) ? 'trend-up' : 'trend-down'; ?>">
+                        <?php 
+                        $diff = round(($stats['avg_percentage'] ?? 0) - ($prev_stats['prev_avg_percentage'] ?? 0), 1);
+                        echo ($diff >= 0 ? '+' : '') . $diff . '%';
+                        ?>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 
                 <div class="stat-card primary">
@@ -873,11 +907,11 @@ $notifications = $stmt->fetchAll();
                         <i class="fas fa-clock"></i>
                     </div>
                     <div class="stat-details">
-                        <h3><?php echo round($stats['total_time_spent'] / 60, 1); ?></h3>
+                        <h3><?php echo round(($stats['total_time_spent'] ?? 0) / 60, 1); ?></h3>
                         <p>Часов обучения</p>
                         <div class="stat-trend trend-up">
                             <i class="fas fa-brain"></i>
-                            <?php echo $stats['total_tests']; ?> тестов
+                            <?php echo $stats['total_tests'] ?? 0; ?> тестов
                         </div>
                     </div>
                 </div>
@@ -887,7 +921,7 @@ $notifications = $stmt->fetchAll();
                         <i class="fas fa-bullseye"></i>
                     </div>
                     <div class="stat-details">
-                        <h3><?php echo round($stats['total_score'] / max($stats['total_points'], 1) * 100, 1); ?>%</h3>
+                        <h3><?php echo round(($stats['total_score'] ?? 0) / max(($stats['total_points'] ?? 1), 1) * 100, 1); ?>%</h3>
                         <p>Общая эффективность</p>
                         <div class="stat-trend trend-up">
                             <i class="fas fa-star"></i>
@@ -903,11 +937,11 @@ $notifications = $stmt->fetchAll();
                         <i class="fas fa-file-alt"></i>
                     </div>
                     <div class="stat-details">
-                        <h3><?php echo $stats['total_tests_created']; ?></h3>
+                        <h3><?php echo $stats['total_tests_created'] ?? 0; ?></h3>
                         <p>Созданных тестов</p>
                         <div class="stat-trend trend-up">
                             <i class="fas fa-plus"></i>
-                            <?php echo $stats['active_tests']; ?> активных
+                            <?php echo $stats['active_tests'] ?? 0; ?> активных
                         </div>
                     </div>
                 </div>
@@ -917,11 +951,11 @@ $notifications = $stmt->fetchAll();
                         <i class="fas fa-users"></i>
                     </div>
                     <div class="stat-details">
-                        <h3><?php echo $stats['total_students']; ?></h3>
+                        <h3><?php echo $stats['total_students'] ?? 0; ?></h3>
                         <p>Уникальных студентов</p>
                         <div class="stat-trend trend-up">
                             <i class="fas fa-chart-line"></i>
-                            <?php echo $stats['total_tests_taken']; ?> попыток
+                            <?php echo $stats['total_tests_taken'] ?? 0; ?> попыток
                         </div>
                     </div>
                 </div>
@@ -931,7 +965,7 @@ $notifications = $stmt->fetchAll();
                         <i class="fas fa-percentage"></i>
                     </div>
                     <div class="stat-details">
-                        <h3><?php echo round($stats['avg_success_rate'], 1); ?>%</h3>
+                        <h3><?php echo round($stats['avg_success_rate'] ?? 0, 1); ?>%</h3>
                         <p>Средний успех</p>
                         <div class="stat-trend trend-up">
                             <i class="fas fa-graduation-cap"></i>
@@ -945,7 +979,7 @@ $notifications = $stmt->fetchAll();
                         <i class="fas fa-check-double"></i>
                     </div>
                     <div class="stat-details">
-                        <h3><?php echo $stats['pending_reviews']; ?></h3>
+                        <h3><?php echo $stats['pending_reviews'] ?? 0; ?></h3>
                         <p>Тестов на проверке</p>
                         <div class="stat-trend trend-down">
                             <i class="fas fa-clock"></i>
@@ -968,127 +1002,201 @@ $notifications = $stmt->fetchAll();
                 </div>
             </div>
 
-            <!-- Статистика по предметам/группам -->
+            <!-- Статистика по тестам -->
             <div class="section">
                 <div class="section-header">
-                    <h2><i class="fas fa-book"></i> 
-                        <?php echo $user['role'] == 'student' ? 'По предметам' : 'По группам'; ?>
-                    </h2>
+                    <h2><i class="fas fa-book"></i>Статистика по тестам</h2>
                 </div>
                 <div class="chart-container">
-                    <canvas id="subjectGroupChart"></canvas>
+                    <canvas id="testStatsChart"></canvas>
                 </div>
             </div>
         </div>
 
         <!-- Детальная табличная статистика -->
         <div class="section">
-            <div class="section-header">
-                <h2><i class="fas fa-table"></i> Детальная статистика</h2>
+            <div class="tabs">
+                <div class="tab active" data-tab="tests">Статистика по тестам</div>
+                <?php if ($user['role'] == 'student'): ?>
+                <div class="tab" data-tab="recent">Последние тесты</div>
+                <?php endif; ?>
+            </div>
+            
+            <div class="tab-content active" id="tests-tab">
+                <?php if ($user['role'] == 'student'): ?>
+                    <!-- Статистика по тестам для студента -->
+                    <?php if (!empty($test_stats)): ?>
+                    <table class="stats-table">
+                        <thead>
+                            <tr>
+                                <th>Тест</th>
+                                <th>Попыток</th>
+                                <th>Средний результат</th>
+                                <th>Лучший результат</th>
+                                <th>Время изучения</th>
+                                <th>Эффективность</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($test_stats as $test): ?>
+                                <tr>
+                                    <td><strong><?php echo htmlspecialchars($test['test_name']); ?></strong></td>
+                                    <td><?php echo $test['test_count'] ?? 0; ?></td>
+                                    <td>
+                                        <span class="score-badge <?php 
+                                            $avgScore = $test['avg_score'] ?? 0;
+                                            if ($avgScore >= 80) {
+                                                echo 'score-excellent';
+                                            } elseif ($avgScore >= 60) {
+                                                echo 'score-good';
+                                            } else {
+                                                echo 'score-poor';
+                                            }
+                                        ?>">
+                                            <?php echo round($avgScore, 1); ?>%
+                                        </span>
+                                    </td>
+                                    <td><?php echo round($test['best_score'] ?? 0, 1); ?>%</td>
+                                    <td><?php echo round(($test['total_time'] ?? 0) / 60, 1); ?> ч</td>
+                                    <td>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" style="width: <?php echo $avgScore; ?>%"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php else: ?>
+                        <p style="text-align: center; padding: 20px; color: var(--gray);">
+                            <i class="fas fa-info-circle"></i> Нет данных для отображения
+                        </p>
+                    <?php endif; ?>
+                    
+                <?php else: ?>
+                    <!-- Статистика по тестам для преподавателя -->
+                    <?php if (!empty($test_stats)): ?>
+                    <table class="stats-table">
+                        <thead>
+                            <tr>
+                                <th>Тест</th>
+                                <th>Попыток</th>
+                                <th>Уникальных студентов</th>
+                                <th>Средний результат</th>
+                                <th>Лучший результат</th>
+                                <th>Успеваемость</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($test_stats as $test): ?>
+                                <tr>
+                                    <td><strong><?php echo htmlspecialchars($test['test_name']); ?></strong></td>
+                                    <td><?php echo $test['attempts'] ?? 0; ?></td>
+                                    <td><?php echo $test['unique_students'] ?? 0; ?></td>
+                                    <td>
+                                        <span class="score-badge <?php 
+                                            $avgScore = $test['avg_score'] ?? 0;
+                                            if ($avgScore >= 80) {
+                                                echo 'score-excellent';
+                                            } elseif ($avgScore >= 60) {
+                                                echo 'score-good';
+                                            } else {
+                                                echo 'score-poor';
+                                            }
+                                        ?>">
+                                            <?php echo round($avgScore, 1); ?>%
+                                        </span>
+                                    </td>
+                                    <td><?php echo round($test['best_score'] ?? 0, 1); ?>%</td>
+                                    <td>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill" style="width: <?php echo $avgScore; ?>%"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php else: ?>
+                        <p style="text-align: center; padding: 20px; color: var(--gray);">
+                            <i class="fas fa-info-circle"></i> Нет данных по тестам для отображения
+                        </p>
+                    <?php endif; ?>
+                <?php endif; ?>
             </div>
             
             <?php if ($user['role'] == 'student'): ?>
-                <!-- Статистика по предметам для студента -->
-                <table class="stats-table">
-                    <thead>
-                        <tr>
-                            <th>Предмет</th>
-                            <th>Тестов</th>
-                            <th>Средний результат</th>
-                            <th>Лучший результат</th>
-                            <th>Время изучения</th>
-                            <th>Эффективность</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($subject_stats as $subject): ?>
-                            <tr>
-                                <td><strong><?php echo htmlspecialchars($subject['subject']); ?></strong></td>
-                                <td><?php echo $subject['test_count']; ?></td>
-                                <td>
-                                    <span class="score-badge <?php 
-                                        echo $subject['avg_score'] >= 80 ? 'score-excellent' : 
-                                             ($subject['avg_score'] >= 60 ? 'score-good' : 'score-poor'); 
-                                    ?>">
-                                        <?php echo round($subject['avg_score'], 1); ?>%
-                                    </span>
-                                </td>
-                                <td><?php echo round($subject['best_score'], 1); ?>%</td>
-                                <td><?php echo round($subject['total_time'] / 60, 1); ?> ч</td>
-                                <td>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" style="width: <?php echo $subject['avg_score']; ?>%"></div>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+            <div class="tab-content" id="recent-tab">
+                <!-- Последние пройденные тесты для студента -->
+                <?php
+                $stmt = $pdo->prepare("
+                    SELECT t.title, tr.score, tr.total_points, tr.percentage, tr.passed, tr.completed_at,
+                           u.full_name as teacher_name, tr.time_spent
+                    FROM test_results tr
+                    JOIN tests t ON tr.test_id = t.id
+                    JOIN users u ON t.created_by = u.id
+                    WHERE tr.user_id = ?
+                    ORDER BY tr.completed_at DESC
+                    LIMIT 10
+                ");
+                $stmt->execute([$_SESSION['user_id']]);
+                $recent_tests = $stmt->fetchAll();
+                ?>
                 
-            <?php else: ?>
-                <!-- Статистика по группам для преподавателя -->
+                <?php if (!empty($recent_tests)): ?>
                 <table class="stats-table">
                     <thead>
                         <tr>
-                            <th>Группа</th>
-                            <th>Студентов</th>
-                            <th>Пройдено тестов</th>
-                            <th>Средний результат</th>
-                            <th>Успешно сдано</th>
-                            <th>Успеваемость</th>
+                            <th>Тест</th>
+                            <th>Преподаватель</th>
+                            <th>Результат</th>
+                            <th>Баллы</th>
+                            <th>Время</th>
+                            <th>Дата</th>
+                            <th>Статус</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($group_stats as $group): ?>
+                        <?php foreach ($recent_tests as $test): ?>
                             <tr>
-                                <td><strong><?php echo htmlspecialchars($group['group_name']); ?></strong></td>
-                                <td><?php echo $group['student_count']; ?></td>
-                                <td><?php echo $group['tests_taken']; ?></td>
+                                <td><strong><?php echo htmlspecialchars($test['title']); ?></strong></td>
+                                <td><?php echo htmlspecialchars($test['teacher_name']); ?></td>
                                 <td>
                                     <span class="score-badge <?php 
-                                        echo $group['avg_score'] >= 80 ? 'score-excellent' : 
-                                             ($group['avg_score'] >= 60 ? 'score-good' : 'score-poor'); 
+                                        $percentage = $test['percentage'] ?? 0;
+                                        if ($percentage >= 80) {
+                                            echo 'score-excellent';
+                                        } elseif ($percentage >= 60) {
+                                            echo 'score-good';
+                                        } else {
+                                            echo 'score-poor';
+                                        }
                                     ?>">
-                                        <?php echo round($group['avg_score'], 1); ?>%
+                                        <?php echo round($percentage, 1); ?>%
                                     </span>
                                 </td>
-                                <td><?php echo $group['passed_tests']; ?></td>
+                                <td><?php echo $test['score'] ?? 0; ?> / <?php echo $test['total_points'] ?? 0; ?></td>
+                                <td><?php echo round(($test['time_spent'] ?? 0) / 60, 1); ?> мин</td>
+                                <td><?php echo date('d.m.Y H:i', strtotime($test['completed_at'])); ?></td>
                                 <td>
-                                    <div class="progress-bar">
-                                        <div class="progress-fill" style="width: <?php echo $group['avg_score']; ?>%"></div>
-                                    </div>
+                                    <span class="score-badge <?php echo $test['passed'] ? 'score-excellent' : 'score-poor'; ?>">
+                                        <?php echo $test['passed'] ? 'Сдан' : 'Не сдан'; ?>
+                                    </span>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
+                <?php else: ?>
+                    <p style="text-align: center; padding: 20px; color: var(--gray);">
+                        <i class="fas fa-info-circle"></i> Нет данных о пройденных тестах
+                    </p>
+                <?php endif; ?>
+            </div>
             <?php endif; ?>
         </div>
 
-        <!-- Дополнительные графики -->
-        <div class="charts-grid">
-            <!-- Активность по времени -->
-            <div class="section">
-                <div class="section-header">
-                    <h2><i class="fas fa-clock"></i> Активность по времени суток</h2>
-                </div>
-                <div class="chart-container">
-                    <canvas id="timeActivityChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Статистика по сложности -->
-            <div class="section">
-                <div class="section-header">
-                    <h2><i class="fas fa-signal"></i> Результаты по сложности</h2>
-                </div>
-                <div class="chart-container">
-                    <canvas id="difficultyChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <?php if ($user['role'] == 'teacher'): ?>
+        <?php if ($user['role'] == 'teacher' && !empty($top_students)): ?>
         <!-- Топ студентов для преподавателя -->
         <div class="section">
             <div class="section-header">
@@ -1109,18 +1217,24 @@ $notifications = $stmt->fetchAll();
                     <?php foreach ($top_students as $student): ?>
                         <tr>
                             <td><strong><?php echo htmlspecialchars($student['full_name']); ?></strong></td>
-                            <td><?php echo htmlspecialchars($student['group_name']); ?></td>
+                            <td><?php echo htmlspecialchars($student['group_name'] ?? 'Без группы'); ?></td>
                             <td><?php echo $student['tests_taken']; ?></td>
                             <td>
                                 <span class="score-badge <?php 
-                                    echo $student['avg_score'] >= 80 ? 'score-excellent' : 
-                                         ($student['avg_score'] >= 60 ? 'score-good' : 'score-poor'); 
+                                    $avgScore = $student['avg_score'] ?? 0;
+                                    if ($avgScore >= 80) {
+                                        echo 'score-excellent';
+                                    } elseif ($avgScore >= 60) {
+                                        echo 'score-good';
+                                    } else {
+                                        echo 'score-poor';
+                                    }
                                 ?>">
-                                    <?php echo round($student['avg_score'], 1); ?>%
+                                    <?php echo round($avgScore, 1); ?>%
                                 </span>
                             </td>
-                            <td><?php echo round($student['best_score'], 1); ?>%</td>
-                            <td><strong><?php echo $student['total_points']; ?></strong></td>
+                            <td><?php echo round($student['best_score'] ?? 0, 1); ?>%</td>
+                            <td><strong><?php echo $student['total_points'] ?? 0; ?></strong></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -1134,102 +1248,127 @@ $notifications = $stmt->fetchAll();
         document.addEventListener('DOMContentLoaded', function() {
             <?php if ($user['role'] == 'student'): ?>
             // График прогресса для студента
-            const progressCtx = document.getElementById('progressChart').getContext('2d');
-            new Chart(progressCtx, {
-                type: 'line',
-                data: {
-                    labels: <?php echo json_encode(array_map(function($week) { 
-                        return 'Нед. ' . substr($week['week'], 4); 
-                    }, array_reverse($weekly_activity))); ?>,
-                    datasets: [{
-                        label: 'Средний результат (%)',
-                        data: <?php echo json_encode(array_map(function($week) { 
-                            return round($week['avg_score'], 1); 
+            const progressCtx = document.getElementById('progressChart');
+            <?php if (!empty($weekly_activity)): ?>
+            if (progressCtx) {
+                new Chart(progressCtx, {
+                    type: 'line',
+                    data: {
+                        labels: <?php echo json_encode(array_map(function($week) { 
+                            return 'Нед. ' . substr($week['week'], 4); 
                         }, array_reverse($weekly_activity))); ?>,
-                        borderColor: '#3498db',
-                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                        tension: 0.4,
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 100
+                        datasets: [{
+                            label: 'Средний результат (%)',
+                            data: <?php echo json_encode(array_map(function($week) { 
+                                return round($week['avg_score'] ?? 0, 1); 
+                            }, array_reverse($weekly_activity))); ?>,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100
+                            }
                         }
                     }
-                }
-            });
-
-            // График по предметам
-            const subjectCtx = document.getElementById('subjectGroupChart').getContext('2d');
-            new Chart(subjectCtx, {
-                type: 'bar',
-                data: {
-                    labels: <?php echo json_encode(array_column($subject_stats, 'subject')); ?>,
-                    datasets: [{
-                        label: 'Средний результат (%)',
-                        data: <?php echo json_encode(array_column($subject_stats, 'avg_score')); ?>,
-                        backgroundColor: '#2ecc71'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false
-                }
-            });
-
-            <?php else: ?>
-            // Графики для преподавателя
-            const progressCtx = document.getElementById('progressChart').getContext('2d');
-            new Chart(progressCtx, {
-                type: 'line',
-                data: {
-                    labels: <?php echo json_encode(array_map(function($day) { 
-                        return date('d.m', strtotime($day['date'])); 
-                    }, array_slice(array_reverse($daily_activity), 0, 14))); ?>,
-                    datasets: [{
-                        label: 'Активные студенты',
-                        data: <?php echo json_encode(array_map(function($day) { 
-                            return $day['active_students']; 
-                        }, array_slice(array_reverse($daily_activity), 0, 14))); ?>,
-                        borderColor: '#3498db',
-                        backgroundColor: 'rgba(52, 152, 219, 0.1)',
-                        fill: true
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false
-                }
-            });
-
-            const groupCtx = document.getElementById('subjectGroupChart').getContext('2d');
-            new Chart(groupCtx, {
-                type: 'bar',
-                data: {
-                    labels: <?php echo json_encode(array_column($group_stats, 'group_name')); ?>,
-                    datasets: [{
-                        label: 'Средний результат (%)',
-                        data: <?php echo json_encode(array_column($group_stats, 'avg_score')); ?>,
-                        backgroundColor: '#e74c3c'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false
-                }
-            });
+                });
+            }
             <?php endif; ?>
 
-            // Дополнительные графики
-            const timeCtx = document.getElementById('timeActivityChart').getContext('2d');
-            const difficultyCtx = document.getElementById('difficultyChart').getContext('2d');
+            // График по тестам для студента
+            const testCtx = document.getElementById('testStatsChart');
+            <?php if (!empty($test_stats)): ?>
+            if (testCtx) {
+                new Chart(testCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: <?php echo json_encode(array_map(function($test) { 
+                            return $test['test_name']; 
+                        }, array_slice($test_stats, 0, 5))); ?>,
+                        datasets: [{
+                            label: 'Средний результат (%)',
+                            data: <?php echo json_encode(array_map(function($test) { 
+                                return $test['avg_score'] ?? 0; 
+                            }, array_slice($test_stats, 0, 5))); ?>,
+                            backgroundColor: '#2ecc71'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+            <?php endif; ?>
+
+            <?php else: ?>
             
-            // Здесь можно добавить инициализацию дополнительных графиков
+
+            const testCtx = document.getElementById('testStatsChart');
+            <?php if (!empty($test_stats)): ?>
+            if (testCtx) {
+                new Chart(testCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: <?php echo json_encode(array_map(function($test) { 
+                            return $test['test_name']; 
+                        }, array_slice($test_stats, 0, 5))); ?>,
+                        datasets: [{
+                            label: 'Количество попыток',
+                            data: <?php echo json_encode(array_map(function($test) { 
+                                return $test['attempts'] ?? 0; 
+                            }, array_slice($test_stats, 0, 5))); ?>,
+                            backgroundColor: '#e74c3c'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+            <?php endif; ?>
+            <?php endif; ?>
+            
+            // Табы
+            const tabs = document.querySelectorAll('.tab');
+            tabs.forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    // Убираем активный класс у всех табов и контента
+                    document.querySelectorAll('.tab').forEach(function(t) {
+                        t.classList.remove('active');
+                    });
+                    document.querySelectorAll('.tab-content').forEach(function(c) {
+                        c.classList.remove('active');
+                    });
+                    
+                    // Добавляем активный класс к выбранному табу
+                    tab.classList.add('active');
+                    
+                    // Показываем соответствующий контент
+                    const tabId = tab.getAttribute('data-tab');
+                    document.getElementById(tabId + '-tab').classList.add('active');
+                });
+            });
+            
+            // Фильтр по периоду
+            const periodButtons = document.querySelectorAll('.period-btn');
+            periodButtons.forEach(function(button) {
+                button.addEventListener('click', function() {
+                    const period = button.getAttribute('data-period');
+                    // Обновляем URL с параметром периода
+                    const url = new URL(window.location);
+                    url.searchParams.set('period', period);
+                    window.location.href = url.toString();
+                });
+            });
         });
     </script>
 </body>

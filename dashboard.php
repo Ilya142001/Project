@@ -711,11 +711,13 @@ try {
     transition: all 0.3s ease;
     border: 2px solid #f8f9fa;
     position: relative;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
 }
 
 .stat-card:hover {
     border-color: var(--primary);
     transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
 }
 
 .stat-card.success:hover {
@@ -745,6 +747,11 @@ try {
     margin-right: 20px;
     color: white;
     flex-shrink: 0;
+    transition: transform 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+    transform: scale(1.05);
 }
 
 .icon-primary {
@@ -777,7 +784,16 @@ try {
     color: var(--secondary);
     font-weight: 700;
     line-height: 1;
+
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+
+/* Просто меняем цвет в зависимости от типа карточки */
+.stat-card.primary .stat-details h3 { color: var(--primary); }
+.stat-card.success .stat-details h3 { color: var(--success); }
+.stat-card.warning .stat-details h3 { color: var(--warning); }
+.stat-card.danger .stat-details h3 { color: var(--danger); }
+.stat-card.info .stat-details h3 { color: var(--info); }
 
 .stat-details p {
     color: var(--gray);
@@ -792,14 +808,73 @@ try {
     gap: 4px;
     font-size: 13px;
     font-weight: 600;
+    padding: 6px 10px;
+    border-radius: 12px;
+    border: 1.5px solid;
+    width: fit-content;
+    transition: all 0.3s ease;
 }
 
 .trend-up {
     color: var(--success);
+    border-color: var(--success);
+    background: rgba(16, 185, 129, 0.08);
+}
+
+.trend-up:hover {
+    background: rgba(16, 185, 129, 0.12);
 }
 
 .trend-down {
     color: var(--danger);
+    border-color: var(--danger);
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.trend-down:hover {
+    background: rgba(239, 68, 68, 0.12);
+}
+
+/* Добавляем варианты для других цветов */
+.trend-primary {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: rgba(79, 70, 229, 0.08);
+}
+
+.trend-warning {
+    color: var(--warning);
+    border-color: var(--warning);
+    background: rgba(245, 158, 11, 0.08);
+}
+
+.trend-info {
+    color: var(--info);
+    border-color: var(--info);
+    background: rgba(6, 182, 212, 0.08);
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .stats-cards {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+    
+    .stat-card {
+        padding: 24px;
+    }
+    
+    .stat-icon {
+        width: 56px;
+        height: 56px;
+        font-size: 20px;
+        margin-right: 16px;
+    }
+    
+    .stat-details h3 {
+        font-size: 28px;
+    }
 }
 
 /* Адаптивность */
@@ -2371,6 +2446,7 @@ try {
     z-index: 2;
 }
 
+/* Анимация заголовка */
 .hero-section h1 {
     font-size: 2.8rem;
     margin-bottom: 20px;
@@ -2378,8 +2454,10 @@ try {
     line-height: 1.2;
     letter-spacing: -0.5px;
     color: #ffffff;
+    animation: slideInDown 0.8s ease-out 0.2s both;
 }
 
+/* Анимация текста */
 .hero-section p {
     font-size: 1.3rem;
     margin-bottom: 35px;
@@ -2390,6 +2468,7 @@ try {
     margin-left: auto;
     margin-right: auto;
     color: #f8f9fa;
+    animation: slideInUp 0.8s ease-out 0.4s both;
 }
 
 .hero-section p strong {
@@ -2424,7 +2503,14 @@ try {
     text-align: center;
     position: relative;
     padding: 0 20px;
+    animation: scaleIn 0.6s ease-out 0.8s both;
 }
+
+/* Задержка для каждой статистики */
+.hero-stat:nth-child(1) { animation-delay: 0.8s; }
+.hero-stat:nth-child(2) { animation-delay: 1.0s; }
+.hero-stat:nth-child(3) { animation-delay: 1.2s; }
+.hero-stat:nth-child(4) { animation-delay: 1.4s; }
 
 .hero-stat::before {
     content: '';
@@ -2448,6 +2534,7 @@ try {
     margin-bottom: 8px;
     color: #ffffff;
     line-height: 1;
+    animation: countUp 1.5s ease-out 1s both;
 }
 
 .hero-stat-label {
@@ -2457,9 +2544,64 @@ try {
     letter-spacing: 0.5px;
     text-transform: uppercase;
     color: #ecf0f1;
+    animation: fadeIn 0.8s ease-out 1.3s both;
 }
 
-/* Анимация появления */
+/* Новые анимации */
+@keyframes slideInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 0.8;
+    }
+}
+
+@keyframes countUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Анимация появления всей секции */
 .hero-section {
     animation: heroEntrance 0.8s ease-out;
 }
@@ -2475,91 +2617,23 @@ try {
     }
 }
 
-/* Адаптивность */
-@media (max-width: 768px) {
-    .hero-section {
-        padding: 40px 25px;
-        border-radius: 20px;
-        margin-bottom: 30px;
-    }
-    
-    .hero-section h1 {
-        font-size: 2.2rem;
-        margin-bottom: 15px;
-    }
-    
-    .hero-section p {
-        font-size: 1.1rem;
-        margin-bottom: 25px;
-    }
-    
-    .hero-stats {
-        gap: 30px;
-        margin-top: 30px;
-    }
-    
-    .hero-stat {
-        padding: 0 15px;
-    }
-    
-    .hero-stat-number {
-        font-size: 2rem;
-    }
-    
-    .hero-stat-label {
-        font-size: 0.85rem;
-    }
+/* Пульсирующая анимация для призыва к действию */
+.hero-section .cta-button {
+    animation: pulse 2s infinite 1.5s;
 }
 
-@media (max-width: 480px) {
-    .hero-section {
-        padding: 30px 20px;
-        border-radius: 16px;
-        margin-bottom: 25px;
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.4);
     }
-    
-    .hero-section h1 {
-        font-size: 1.8rem;
+    70% {
+        transform: scale(1.05);
+        box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);
     }
-    
-    .hero-section p {
-        font-size: 1rem;
-    }
-    
-    .hero-stats {
-        gap: 20px;
-        margin-top: 25px;
-    }
-    
-    .hero-stat {
-        padding: 0 10px;
-    }
-    
-    .hero-stat-number {
-        font-size: 1.7rem;
-    }
-    
-    .hero-stat-label {
-        font-size: 0.8rem;
-    }
-    
-    .hero-stat::before {
-        height: 30px;
-    }
-}
-/* Анимация появления */
-.hero-section {
-    animation: heroEntrance 0.8s ease-out;
-}
-
-@keyframes heroEntrance {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
     }
 }
 
@@ -2574,11 +2648,13 @@ try {
     .hero-section h1 {
         font-size: 2.2rem;
         margin-bottom: 15px;
+        animation: slideInDown 0.6s ease-out 0.2s both;
     }
     
     .hero-section p {
         font-size: 1.1rem;
         margin-bottom: 25px;
+        animation: slideInUp 0.6s ease-out 0.4s both;
     }
     
     .hero-stats {
@@ -2588,14 +2664,21 @@ try {
     
     .hero-stat {
         padding: 0 15px;
+        animation: scaleIn 0.5s ease-out 0.6s both;
     }
+    
+    .hero-stat:nth-child(1) { animation-delay: 0.6s; }
+    .hero-stat:nth-child(2) { animation-delay: 0.8s; }
+    .hero-stat:nth-child(3) { animation-delay: 1.0s; }
     
     .hero-stat-number {
         font-size: 2rem;
+        animation: countUp 1.2s ease-out 0.8s both;
     }
     
     .hero-stat-label {
         font-size: 0.85rem;
+        animation: fadeIn 0.6s ease-out 1s both;
     }
 }
 
